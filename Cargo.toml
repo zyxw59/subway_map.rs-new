@@ -1,0 +1,7 @@
+[package]
+name = "parser_test"
+version = "0.1.0"
+authors = ["Emily Crandall Fleischman <emilycf@mit.edu>"]
+
+[dependencies]
+regex-syntax = "0.6.3"
