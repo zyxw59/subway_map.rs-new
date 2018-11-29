@@ -51,10 +51,18 @@ impl<R: BufRead> Lexer<R> {
         })
     }
 
-    fn skip_whitespace(&mut self) -> EResult<()> {
-        // increment as long as we've got whitespace
-        while let Some(CharCat::Whitespace) = self.get()?.map(CharCat::from) {
-            self.pos += 1;
+    fn skip_whitespace_and_comments(&mut self) -> EResult<()> {
+        while let Some(c) = self.get()? {
+            match c.into() {
+                // move along
+                CharCat::Whitespace => self.pos += 1,
+                // rest of line is a comment; retrieve new line
+                CharCat::Comment => {
+                    self.fill_buffer()?;
+                }
+                // stop skipping
+                _ => break,
+            }
         }
         Ok(())
     }
@@ -187,7 +195,7 @@ impl<R: BufRead> Iterator for Lexer<R> {
     type Item = EResult<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        itry!(self.skip_whitespace());
+        itry!(self.skip_whitespace_and_comments());
         itry!(self.get()).map(|c| {
             match c.into() {
                 CharCat::Letter | CharCat::Underscore => self.parse_word(),
@@ -211,6 +219,7 @@ enum CharCat {
     Singleton,
     LeftBracket,
     RightBracket,
+    Comment,
     Whitespace,
     Other,
 }
@@ -226,6 +235,7 @@ impl From<char> for CharCat {
             '(' | ')' | ',' | ';' => Singleton,
             '[' => LeftBracket,
             ']' => RightBracket,
+            '#' => Comment,
             c if is_word_character(c) => Letter,
             c if c.is_whitespace() => Whitespace,
             _ => Other,
