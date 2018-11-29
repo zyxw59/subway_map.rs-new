@@ -102,7 +102,12 @@ impl<R: BufRead> Lexer<R> {
     }
 
     fn parse_dot(&mut self) -> EResult<Token> {
-        match self.vec_buffer.get(self.pos + 1).cloned().map(CharCat::from) {
+        match self
+            .vec_buffer
+            .get(self.pos + 1)
+            .cloned()
+            .map(CharCat::from)
+        {
             Some(CharCat::Number) => self.parse_number(),
             _ => self.parse_other(CharCat::Dot),
         }
@@ -196,15 +201,13 @@ impl<R: BufRead> Iterator for Lexer<R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         itry!(self.skip_whitespace_and_comments());
-        itry!(self.get()).map(|c| {
-            match c.into() {
-                CharCat::Letter | CharCat::Underscore => self.parse_word(),
-                CharCat::Number => self.parse_number(),
-                CharCat::Dot => self.parse_dot(),
-                CharCat::Quote => self.parse_string(),
-                CharCat::Singleton => Ok(Token::singleton(c).unwrap()),
-                cat => self.parse_other(cat),
-            }
+        itry!(self.get()).map(|c| match c.into() {
+            CharCat::Letter | CharCat::Underscore => self.parse_word(),
+            CharCat::Number => self.parse_number(),
+            CharCat::Dot => self.parse_dot(),
+            CharCat::Quote => self.parse_string(),
+            CharCat::Singleton => Ok(Token::singleton(c).unwrap()),
+            cat => self.parse_other(cat),
         })
     }
 }
