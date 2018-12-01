@@ -206,7 +206,10 @@ impl<R: BufRead> Iterator for Lexer<R> {
             CharCat::Number => self.parse_number(),
             CharCat::Dot => self.parse_dot(),
             CharCat::Quote => self.parse_string(),
-            CharCat::Singleton => Ok(Token::singleton(c).unwrap()),
+            CharCat::Singleton => {
+                self.pos += 1;
+                Ok(Token::singleton(c).unwrap())
+            }
             cat => self.parse_other(cat),
         })
     }
@@ -273,5 +276,75 @@ impl Token {
             ';' => Some(Token::Semicolon),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Lexer, Token};
+
+    #[test]
+    fn all_whitespace() {
+        let mut lexer = Lexer::new(" \n\t\u{a0}".as_bytes());
+        assert!(lexer.next().is_none());
+    }
+
+    #[test]
+    fn comment() {
+        let mut lexer = Lexer::new("# abc. 12345 //\"".as_bytes());
+        assert!(lexer.next().is_none());
+    }
+
+    #[test]
+    fn tokens() {
+        let lexer = Lexer::new("a,b.c.123".as_bytes());
+        let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(
+            tokens,
+            [
+                Token::Tag("a".into()),
+                Token::Comma,
+                Token::Tag("b".into()),
+                Token::Tag(".".into()),
+                Token::Tag("c".into()),
+                Token::Number(0.123),
+            ]
+        );
+    }
+
+    #[test]
+    fn number_dot() {
+        let lexer = Lexer::new("1.1.1".as_bytes());
+        let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(tokens, [Token::Number(1.1), Token::Number(0.1)]);
+    }
+
+    #[test]
+    fn strings() {
+        let lexer = Lexer::new(r#""abc" "\"\\""#.as_bytes());
+        let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(
+            tokens,
+            [Token::String("abc".into()), Token::String(r#""\"#.into())]
+        );
+    }
+
+    #[test]
+    fn string_trailing_backslash() {
+        let mut lexer = Lexer::new(r#""\"#.as_bytes());
+        assert!(lexer.next().unwrap().is_err());
+    }
+
+    #[test]
+    fn string_unterminated() {
+        let mut lexer = Lexer::new(r#"""#.as_bytes());
+        assert!(lexer.next().unwrap().is_err());
+    }
+
+    #[test]
+    fn string_multiline() {
+        let lexer = Lexer::new("\"foo\nbar\"".as_bytes());
+        let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(tokens, [Token::String("foo\nbar".into())]);
     }
 }
