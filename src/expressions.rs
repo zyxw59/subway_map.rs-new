@@ -65,3 +65,15 @@ impl ops::Div for Expression {
         })
     }
 }
+
+impl ops::Neg for Expression {
+    type Output = EResult<Expression>;
+
+    fn neg(self) -> EResult<Expression> {
+        use self::Expression::*;
+        Ok(match self {
+            Number(x) => Number(-x),
+            Point(x, y) => Point(-x, -y),
+        })
+    }
+}

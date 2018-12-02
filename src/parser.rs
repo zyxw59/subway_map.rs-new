@@ -3,7 +3,7 @@ use std::io::BufRead;
 
 use expressions::Expression;
 use lexer::{Lexer, Token};
-use operators::BinaryOperator;
+use operators::{BinaryOperator, UnaryOperator};
 
 type Error = Box<dyn error::Error>;
 type EResult<T> = Result<T, Error>;
@@ -55,8 +55,7 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
             None => Err("Unexpected end of input")?,
             Some(Token::LeftParen) => self.parse_parentheses(),
             Some(Token::Number(num)) => Ok(Expression::Number(num)),
-            Some(Token::Tag(_)) => unimplemented!(),
-            _ => Err("Unexpected token")?,
+            Some(tok) => self.parse_unary(tok),
         }
     }
 
@@ -88,6 +87,16 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
             }
             Some(_) => Err("Unexpected token")?,
             None => Err("Unclosed parentheses")?,
+        }
+    }
+
+    fn parse_unary(&mut self, token: Token) -> EResult<Expression> {
+        if let Some(op) = UnaryOperator::from_builtin(&token) {
+            let lhs = self.parse_primary()?;
+            let arg = self.parse_expression_1(lhs, op.precedence)?;
+            op.apply(arg)
+        } else {
+            Err("Unexpected token".into())
         }
     }
 }
@@ -142,5 +151,11 @@ mod tests {
     fn scalar_product() {
         let result = Lexer::new("3 * (1,2)".as_bytes()).parse_expression().unwrap();
         assert_eq!(result, Expression::Point(3.0, 6.0));
+    }
+
+    #[test]
+    fn unary_minus() {
+        let result = Lexer::new("3* -2".as_bytes()).parse_expression().unwrap();
+        assert_eq!(result, Expression::Number(-6.0));
     }
 }

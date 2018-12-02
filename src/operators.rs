@@ -8,6 +8,22 @@ use lexer::Token;
 type Error = Box<dyn error::Error>;
 type EResult<T> = Result<T, Error>;
 
+macro_rules! impl_ord {
+    ( $name:tt<$($args:tt),*> ) => {
+        impl<$($args),*> cmp::PartialOrd<usize> for $name<$($args),*> {
+            fn partial_cmp(&self, other: &usize) -> Option<cmp::Ordering> {
+                self.precedence.partial_cmp(other)
+            }
+        }
+
+        impl<$($args),*> cmp::PartialEq<usize> for $name<$($args),*> {
+            fn eq(&self, other: &usize) -> bool {
+                self.precedence == *other
+            }
+        }
+    }
+}
+
 pub struct BinaryOperator<'a> {
     pub precedence: usize,
     function: &'a dyn Fn(Expression, Expression) -> EResult<Expression>,
@@ -48,26 +64,28 @@ impl<'a> BinaryOperator<'a> {
     }
 }
 
-impl<'a> cmp::PartialOrd<usize> for BinaryOperator<'a> {
-    fn partial_cmp(&self, other: &usize) -> Option<cmp::Ordering> {
-        self.precedence.partial_cmp(other)
-    }
+impl_ord! { BinaryOperator<'a> }
+
+pub struct UnaryOperator<'a> {
+    pub precedence: usize,
+    function: &'a dyn Fn(Expression) -> EResult<Expression>,
 }
 
-impl<'a> cmp::PartialEq<usize> for BinaryOperator<'a> {
-    fn eq(&self, other: &usize) -> bool {
-        self.precedence == *other
+impl<'a> UnaryOperator<'a> {
+    pub fn apply(&self, argument: Expression) -> EResult<Expression> {
+        (self.function)(argument)
     }
-}
 
-impl<'a, 'b> cmp::PartialOrd<BinaryOperator<'a>> for BinaryOperator<'b> {
-    fn partial_cmp(&self, other: &BinaryOperator<'a>) -> Option<cmp::Ordering> {
-        self.precedence.partial_cmp(&other.precedence)
-    }
-}
-
-impl<'a, 'b> cmp::PartialEq<BinaryOperator<'a>> for BinaryOperator<'b> {
-    fn eq(&self, other: &BinaryOperator<'a>) -> bool {
-        self.precedence == other.precedence
+    pub fn from_builtin(token: &Token) -> Option<UnaryOperator<'static>> {
+        match token {
+            Token::Tag(tag) => match tag.as_ref() {
+                "-" => Some(UnaryOperator {
+                    precedence: 2,
+                    function: &ops::Neg::neg,
+                }),
+                _ => None,
+            },
+            _ => None,
+        }
     }
 }
