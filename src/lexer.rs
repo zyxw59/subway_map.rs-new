@@ -12,6 +12,7 @@ pub struct Lexer<R> {
     vec_buffer: Vec<char>,
     pos: usize,
     line: usize,
+    put_back: Option<Token>,
 }
 
 impl<R: BufRead> Lexer<R> {
@@ -22,7 +23,27 @@ impl<R: BufRead> Lexer<R> {
             vec_buffer: Vec::new(),
             pos: 0,
             line: 0,
+            put_back: None,
         }
+    }
+
+    pub fn put_back(&mut self, next: Token) {
+        self.put_back = Some(next)
+    }
+
+    fn get_next_token(&mut self) -> Option<EResult<Token>> {
+        itry!(self.skip_whitespace_and_comments());
+        itry!(self.get()).map(|c| match c.into() {
+            CharCat::Letter | CharCat::Underscore => self.parse_word(),
+            CharCat::Number => self.parse_number(),
+            CharCat::Dot => self.parse_dot(),
+            CharCat::Quote => self.parse_string(),
+            CharCat::Singleton => {
+                self.pos += 1;
+                Ok(Token::singleton(c).unwrap())
+            }
+            cat => self.parse_other(cat),
+        })
     }
 
     fn fill_buffer(&mut self) -> EResult<usize> {
@@ -200,18 +221,10 @@ impl<R: BufRead> Iterator for Lexer<R> {
     type Item = EResult<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        itry!(self.skip_whitespace_and_comments());
-        itry!(self.get()).map(|c| match c.into() {
-            CharCat::Letter | CharCat::Underscore => self.parse_word(),
-            CharCat::Number => self.parse_number(),
-            CharCat::Dot => self.parse_dot(),
-            CharCat::Quote => self.parse_string(),
-            CharCat::Singleton => {
-                self.pos += 1;
-                Ok(Token::singleton(c).unwrap())
-            }
-            cat => self.parse_other(cat),
-        })
+        match self.put_back.take() {
+            Some(item) => Some(Ok(item)),
+            None => self.get_next_token(),
+        }
     }
 }
 

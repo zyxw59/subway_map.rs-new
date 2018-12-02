@@ -18,7 +18,7 @@ macro_rules! try_opt {
     ($expr:expr) => {
         match $expr {
             Some(Ok(val)) => Some(val),
-            Some(Err(err)) => return Some(Err(err.into())),
+            Some(Err(err)) => return Err(err.into()),
             None => None,
         }
     };
