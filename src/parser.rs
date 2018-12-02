@@ -166,4 +166,18 @@ mod tests {
         let result = Lexer::new("3* -2".as_bytes()).parse_expression().unwrap();
         assert_eq!(result, Expression::Number(-6.0));
     }
+
+    #[test]
+    fn unary_minus_2() {
+        let result = Lexer::new("-2*3".as_bytes()).parse_expression().unwrap();
+        assert_eq!(result, Expression::Number(-6.0));
+    }
+
+    #[test]
+    fn unary_minus_3() {
+        let result = Lexer::new("-(1,2)*(3,4)".as_bytes())
+            .parse_expression()
+            .unwrap();
+        assert_eq!(result, Expression::Number(-11.0));
+    }
 }
