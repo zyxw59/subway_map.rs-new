@@ -1,4 +1,3 @@
-use std::cmp;
 use std::error;
 use std::ops;
 
@@ -7,22 +6,6 @@ use lexer::Token;
 
 type Error = Box<dyn error::Error>;
 type EResult<T> = Result<T, Error>;
-
-macro_rules! impl_ord {
-    ( $name:tt<$($args:tt),*> ) => {
-        impl<$($args),*> cmp::PartialOrd<usize> for $name<$($args),*> {
-            fn partial_cmp(&self, other: &usize) -> Option<cmp::Ordering> {
-                self.precedence.partial_cmp(other)
-            }
-        }
-
-        impl<$($args),*> cmp::PartialEq<usize> for $name<$($args),*> {
-            fn eq(&self, other: &usize) -> bool {
-                self.precedence == *other
-            }
-        }
-    }
-}
 
 pub struct BinaryOperator<'a> {
     pub precedence: usize,
@@ -35,7 +18,7 @@ impl<'a> BinaryOperator<'a> {
     }
 
     pub fn from_builtin(token: &Token, precedence: usize) -> Option<BinaryOperator<'static>> {
-        BinaryOperator::from_builtin_core(token).filter(|op| op >= &precedence)
+        BinaryOperator::from_builtin_core(token).filter(|op| op.precedence >= precedence)
     }
 
     fn from_builtin_core(token: &Token) -> Option<BinaryOperator<'static>> {
@@ -63,8 +46,6 @@ impl<'a> BinaryOperator<'a> {
         }
     }
 }
-
-impl_ord! { BinaryOperator<'a> }
 
 pub struct UnaryOperator<'a> {
     pub precedence: usize,
