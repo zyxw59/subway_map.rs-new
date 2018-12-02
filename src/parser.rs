@@ -131,25 +131,33 @@ mod tests {
 
     #[test]
     fn parentheses() {
-        let result = Lexer::new("(1+2)*3+4".as_bytes()).parse_expression().unwrap();
+        let result = Lexer::new("(1+2)*3+4".as_bytes())
+            .parse_expression()
+            .unwrap();
         assert_eq!(result, Expression::Number(13.0));
     }
 
     #[test]
     fn points() {
-        let result = Lexer::new("(1,2) + (3,4)".as_bytes()).parse_expression().unwrap();
+        let result = Lexer::new("(1,2) + (3,4)".as_bytes())
+            .parse_expression()
+            .unwrap();
         assert_eq!(result, Expression::Point(4.0, 6.0));
     }
 
     #[test]
     fn dot_product() {
-        let result = Lexer::new("(1,2) * (3,4)".as_bytes()).parse_expression().unwrap();
+        let result = Lexer::new("(1,2) * (3,4)".as_bytes())
+            .parse_expression()
+            .unwrap();
         assert_eq!(result, Expression::Number(11.0));
     }
 
     #[test]
     fn scalar_product() {
-        let result = Lexer::new("3 * (1,2)".as_bytes()).parse_expression().unwrap();
+        let result = Lexer::new("3 * (1,2)".as_bytes())
+            .parse_expression()
+            .unwrap();
         assert_eq!(result, Expression::Point(3.0, 6.0));
     }
 
