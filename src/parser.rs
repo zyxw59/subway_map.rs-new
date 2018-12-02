@@ -30,7 +30,10 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
                 let mut rhs = self.parse_primary()?;
                 // and check for operators with greater precedence to accumulate onto the rhs
                 while let Some(tok) = try_opt!(self.next()) {
-                    if let Some(op) = BinaryOperator::from_builtin(&tok, min_precedence + 1) {
+                    if let Some(op) = BinaryOperator::from_builtin(&tok, op.precedence + 1) {
+                        // put the operator back so that we can match it in the recursive call to
+                        // `parse_expression_1`
+                        self.put_back(tok);
                         rhs = self.parse_expression_1(rhs, op.precedence)?;
                     } else {
                         self.put_back(tok);
@@ -61,5 +64,28 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
 impl<R: BufRead> Parser for Lexer<R> {
     fn put_back(&mut self, put_back: Token) {
         self.put_back(put_back)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Expression, Lexer, Parser};
+
+    #[test]
+    fn basic_arithmetic() {
+        let result = Lexer::new("1+2*3+4".as_bytes()).parse_expression().unwrap();
+        assert_eq!(result, Expression::Number(11.0));
+    }
+
+    #[test]
+    fn basic_arithmetic_2() {
+        let result = Lexer::new("1-2*3+4".as_bytes()).parse_expression().unwrap();
+        assert_eq!(result, Expression::Number(-1.0));
+    }
+
+    #[test]
+    fn basic_arithmetic_3() {
+        let result = Lexer::new("1-3/2*5".as_bytes()).parse_expression().unwrap();
+        assert_eq!(result, Expression::Number(-6.5));
     }
 }

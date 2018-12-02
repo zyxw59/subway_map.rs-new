@@ -4,6 +4,7 @@ use std::ops;
 type Error = Box<dyn error::Error>;
 type EResult<T> = Result<T, Error>;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Expression {
     Number(f64),
     Point(f64, f64),
