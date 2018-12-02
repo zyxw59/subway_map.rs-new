@@ -53,10 +53,41 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
     fn parse_primary(&mut self) -> EResult<Expression> {
         match try_opt!(self.next()) {
             None => Err("Unexpected end of input")?,
-            Some(Token::LeftParen) => unimplemented!(),
+            Some(Token::LeftParen) => self.parse_parentheses(),
             Some(Token::Number(num)) => Ok(Expression::Number(num)),
             Some(Token::Tag(_)) => unimplemented!(),
             _ => Err("Unexpected token")?,
+        }
+    }
+
+    fn parse_parentheses(&mut self) -> EResult<Expression> {
+        let x = self.parse_expression()?;
+        match try_opt!(self.next()) {
+            Some(Token::RightParen) => Ok(x),
+            Some(Token::Comma) => {
+                let y = self.parse_expression()?;
+                match try_opt!(self.next()) {
+                    Some(Token::RightParen) => {
+                        use self::Expression::*;
+                        match (x, y) {
+                            (Number(x), Number(y)) => Ok(Point(x, y)),
+                            (Number(_), Point(..)) => Err(
+                                "Type error: tried to construct a point from a number and a point",
+                            )?,
+                            (Point(..), Number(_)) => Err(
+                                "Type error: tried to construct a point from a point and a number",
+                            )?,
+                            (Point(..), Point(..)) => Err(
+                                "Type error: tried to construct a point from a point and a point",
+                            )?,
+                        }
+                    }
+                    Some(_) => Err("Unexpected token")?,
+                    None => Err("Unclosed parentheses")?,
+                }
+            }
+            Some(_) => Err("Unexpected token")?,
+            None => Err("Unclosed parentheses")?,
         }
     }
 }
@@ -87,5 +118,29 @@ mod tests {
     fn basic_arithmetic_3() {
         let result = Lexer::new("1-3/2*5".as_bytes()).parse_expression().unwrap();
         assert_eq!(result, Expression::Number(-6.5));
+    }
+
+    #[test]
+    fn parentheses() {
+        let result = Lexer::new("(1+2)*3+4".as_bytes()).parse_expression().unwrap();
+        assert_eq!(result, Expression::Number(13.0));
+    }
+
+    #[test]
+    fn points() {
+        let result = Lexer::new("(1,2) + (3,4)".as_bytes()).parse_expression().unwrap();
+        assert_eq!(result, Expression::Point(4.0, 6.0));
+    }
+
+    #[test]
+    fn dot_product() {
+        let result = Lexer::new("(1,2) * (3,4)".as_bytes()).parse_expression().unwrap();
+        assert_eq!(result, Expression::Number(11.0));
+    }
+
+    #[test]
+    fn scalar_product() {
+        let result = Lexer::new("3 * (1,2)".as_bytes()).parse_expression().unwrap();
+        assert_eq!(result, Expression::Point(3.0, 6.0));
     }
 }
