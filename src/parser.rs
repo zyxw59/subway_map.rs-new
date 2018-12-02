@@ -12,37 +12,22 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
     fn put_back(&mut self, put_back: Token);
 
     fn parse_expression(&mut self) -> EResult<Expression> {
-        let lhs = self.parse_primary()?;
-        self.parse_expression_1(lhs, 0)
+        self.parse_expression_1(0)
     }
 
-    fn parse_expression_1(
-        &mut self,
-        mut lhs: Expression,
-        min_precedence: usize,
-    ) -> EResult<Expression> {
-        // we start with the given left hand value.
+    fn parse_expression_1(&mut self, min_precedence: usize) -> EResult<Expression> {
+        // initial left-hand side
+        let mut lhs = self.parse_primary()?;
         // as long as we encounter operators with precedence >= min_precedence, we can accumulate
-        // them into that value.
+        // them into `lhs`.
         while let Some(tok) = try_opt!(self.next()) {
             if let Some(op) = BinaryOperator::from_builtin(&tok, min_precedence) {
-                // we have an operator; now to get the right hand side
-                let mut rhs = self.parse_primary()?;
-                // and check for operators with greater precedence to accumulate onto the rhs
-                while let Some(tok) = try_opt!(self.next()) {
-                    if let Some(op) = BinaryOperator::from_builtin(&tok, op.precedence + 1) {
-                        // put the operator back so that we can match it in the recursive call to
-                        // `parse_expression_1`
-                        self.put_back(tok);
-                        rhs = self.parse_expression_1(rhs, op.precedence)?;
-                    } else {
-                        self.put_back(tok);
-                        break;
-                    }
-                }
-                // we've accumulated the maximal rhs, now apply the operation to get our new lhs
+                // we have an operator; now to get the right hand side, accumulating operators with
+                // greater precedence than the current one
+                let rhs = self.parse_expression_1(op.precedence + 1)?;
                 lhs = op.apply(lhs, rhs)?;
             } else {
+                // the token wasn't an operator, so put it back on the stack
                 self.put_back(tok);
                 break;
             }
@@ -92,8 +77,7 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
 
     fn parse_unary(&mut self, token: Token) -> EResult<Expression> {
         if let Some(op) = UnaryOperator::from_builtin(&token) {
-            let lhs = self.parse_primary()?;
-            let arg = self.parse_expression_1(lhs, op.precedence)?;
+            let arg = self.parse_expression_1(op.precedence)?;
             op.apply(arg)
         } else {
             Err("Unexpected token".into())
