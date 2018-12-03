@@ -1,16 +1,15 @@
 use std::ops;
 
-use error::Result as EResult;
-use expressions::Expression;
+use expressions::{Expression, Result};
 use lexer::Token;
 
 pub struct BinaryOperator<'a> {
     pub precedence: usize,
-    function: &'a dyn Fn(Expression, Expression) -> EResult<Expression>,
+    function: &'a dyn Fn(Expression, Expression) -> Result,
 }
 
 impl<'a> BinaryOperator<'a> {
-    pub fn apply(&self, lhs: Expression, rhs: Expression) -> EResult<Expression> {
+    pub fn apply(&self, lhs: Expression, rhs: Expression) -> Result {
         (self.function)(lhs, rhs)
     }
 
@@ -46,11 +45,11 @@ impl<'a> BinaryOperator<'a> {
 
 pub struct UnaryOperator<'a> {
     pub precedence: usize,
-    function: &'a dyn Fn(Expression) -> EResult<Expression>,
+    function: &'a dyn Fn(Expression) -> Result,
 }
 
 impl<'a> UnaryOperator<'a> {
-    pub fn apply(&self, argument: Expression) -> EResult<Expression> {
+    pub fn apply(&self, argument: Expression) -> Result {
         (self.function)(argument)
     }
 

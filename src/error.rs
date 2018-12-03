@@ -3,6 +3,8 @@ use std::result;
 
 use failure::Fail;
 
+use expressions::Expression;
+
 pub type Result<T> = result::Result<T, Error>;
 
 #[derive(Fail, Debug)]
@@ -11,14 +13,6 @@ pub enum Error {
     Lexer(#[cause] LexerError),
     #[fail(display = "The parser encountered an error: {}", _0)]
     Parser(#[cause] ParserError),
-    #[fail(display = "A math error occured: {}", _0)]
-    Math(#[cause] MathError),
-}
-
-impl From<MathError> for Error {
-    fn from(err: MathError) -> Error {
-        Error::Math(err)
-    }
 }
 
 impl From<ParserError> for Error {
@@ -34,21 +28,49 @@ impl From<LexerError> for Error {
 }
 
 #[derive(Fail, Debug)]
-pub enum MathError {
-    #[fail(display = "A type error occured")]
-    Type,
-    #[fail(display = "Division by zero")]
-    DivisionByZero,
-}
-
-#[derive(Fail, Debug)]
 pub enum ParserError {
     #[fail(display = "Unexpected end of input on line {}", _0)]
     EndOfInput(usize),
     #[fail(display = "Unexpected token on line {}", _0)]
     Token(usize),
-    #[fail(display = "Unclosed parentheses")]
-    Parentheses,
+    #[fail(display = "Unclosed parentheses starting on line {}", _0)]
+    Parentheses(usize),
+    #[fail(display = "A math error ({}) occured on line {}", _0, _1)]
+    Math(#[cause] MathError, usize),
+}
+
+impl ParserError {
+    pub fn type_error(expected: Type, got: Type, line: usize) -> ParserError {
+        ParserError::Math(MathError::Type(expected, got), line)
+    }
+}
+
+#[derive(Fail, Debug)]
+pub enum MathError {
+    #[fail(
+        display = "A type error occured (expected {:?}, got {:?})",
+        _0,
+        _1
+    )]
+    Type(Type, Type),
+    #[fail(display = "Division by zero")]
+    DivisionByZero,
+}
+
+#[derive(Debug)]
+pub enum Type {
+    Number,
+    Point,
+    Line,
+}
+
+impl From<Expression> for Type {
+    fn from(expr: Expression) -> Type {
+        match expr {
+            Expression::Number(_) => Type::Number,
+            Expression::Point(..) => Type::Point,
+        }
+    }
 }
 
 #[derive(Fail, Debug)]
@@ -58,7 +80,7 @@ pub enum LexerError {
     #[fail(display = "Invalid UTF-8 at line {}", _0)]
     Unicode(usize),
     #[fail(
-        display = "An IO error {} occured whil reading line {}",
+        display = "An IO error ({}) occured whil reading line {}",
         _0,
         _1
     )]

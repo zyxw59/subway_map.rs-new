@@ -1,6 +1,6 @@
 use std::io::BufRead;
 
-use error::{MathError, ParserError, Result as EResult};
+use error::{ParserError, Result as EResult, Type};
 use expressions::Expression;
 use lexer::{Lexer, Token};
 use operators::{BinaryOperator, UnaryOperator};
@@ -24,7 +24,9 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
                 // we have an operator; now to get the right hand side, accumulating operators with
                 // greater precedence than the current one
                 let rhs = self.parse_expression_1(op.precedence + 1)?;
-                lhs = op.apply(lhs, rhs)?;
+                lhs = op
+                    .apply(lhs, rhs)
+                    .map_err(|err| ParserError::Math(err, self.line()))?;
             } else {
                 // the token wasn't an operator, so put it back on the stack
                 self.put_back(tok);
@@ -44,6 +46,7 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
     }
 
     fn parse_parentheses(&mut self) -> EResult<Expression> {
+        let start_line = self.line();
         let x = self.parse_expression()?;
         match try_opt!(self.next()) {
             Some(Token::RightParen) => Ok(x),
@@ -54,15 +57,20 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
                         use self::Expression::*;
                         match (x, y) {
                             (Number(x), Number(y)) => Ok(Point(x, y)),
-                            _ => Err(MathError::Type)?,
+                            (Number(_), y) => {
+                                Err(ParserError::type_error(Type::Number, y.into(), self.line()))?
+                            }
+                            (x, _) => {
+                                Err(ParserError::type_error(Type::Number, x.into(), self.line()))?
+                            }
                         }
                     }
                     Some(_) => Err(ParserError::Token(self.line()))?,
-                    None => Err(ParserError::Parentheses)?,
+                    None => Err(ParserError::Parentheses(start_line))?,
                 }
             }
             Some(_) => Err(ParserError::Token(self.line()))?,
-            None => Err(ParserError::Parentheses)?,
+            None => Err(ParserError::Parentheses(start_line))?,
         }
     }
 
@@ -70,6 +78,7 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
         if let Some(op) = UnaryOperator::from_builtin(&token) {
             let arg = self.parse_expression_1(op.precedence)?;
             op.apply(arg)
+                .map_err(|err| ParserError::Math(err, self.line()).into())
         } else {
             Err(ParserError::Token(self.line()))?
         }
