@@ -1,8 +1,6 @@
-use std::error;
 use std::ops;
 
-type Error = Box<dyn error::Error>;
-type EResult<T> = Result<T, Error>;
+use error::{MathError, Result as EResult};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Expression {
@@ -18,7 +16,7 @@ impl ops::Add for Expression {
         Ok(match (self, rhs) {
             (Number(a), Number(b)) => Number(a + b),
             (Point(x1, y1), Point(x2, y2)) => Point(x1 + x2, y1 + y2),
-            _ => Err("Type error: tried to add a number to a point")?,
+            _ => Err(MathError::Type)?,
         })
     }
 }
@@ -31,8 +29,7 @@ impl ops::Sub for Expression {
         Ok(match (self, rhs) {
             (Number(a), Number(b)) => Number(a - b),
             (Point(x1, y1), Point(x2, y2)) => Point(x1 - x2, y1 - y2),
-            (Number(_), Point(..)) => Err("Type error: tried to subtract a point from a number")?,
-            (Point(..), Number(_)) => Err("Type error: tried to subtract a number from a point")?,
+            _ => Err(MathError::Type)?,
         })
     }
 }
@@ -57,11 +54,10 @@ impl ops::Div for Expression {
     fn div(self, rhs: Expression) -> EResult<Expression> {
         use self::Expression::*;
         Ok(match (self, rhs) {
-            (_, Number(x)) if x == 0.0 => Err("Division by zero error")?,
+            (_, Number(x)) if x == 0.0 => Err(MathError::DivisionByZero)?,
             (Number(a), Number(b)) => Number(a / b),
             (Point(x, y), Number(a)) => Point(x / a, y / a),
-            (Point(..), Point(..)) => Err("Type error: tried to divide a point by a point")?,
-            (Number(_), Point(..)) => Err("Type error: tried to divide a number by a point")?,
+            _ => Err(MathError::Type)?,
         })
     }
 }

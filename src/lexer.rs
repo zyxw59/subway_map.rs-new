@@ -1,10 +1,8 @@
-use std::error;
 use std::io::BufRead;
 
 use regex_syntax::is_word_character;
 
-type Error = Box<dyn error::Error>;
-type EResult<T> = Result<T, Error>;
+use error::{LexerError, Result as EResult};
 
 pub struct Lexer<R> {
     input: R,
@@ -31,6 +29,10 @@ impl<R: BufRead> Lexer<R> {
         self.put_back = Some(next)
     }
 
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
     fn get_next_token(&mut self) -> Option<EResult<Token>> {
         itry!(self.skip_whitespace_and_comments());
         itry!(self.get()).map(|c| match c.into() {
@@ -49,7 +51,9 @@ impl<R: BufRead> Lexer<R> {
     fn fill_buffer(&mut self) -> EResult<usize> {
         self.str_buffer.clear();
         self.vec_buffer.clear();
-        self.input.read_line(&mut self.str_buffer)?;
+        self.input
+            .read_line(&mut self.str_buffer)
+            .map_err(|err| LexerError::from_io(err, self.line))?;
         self.vec_buffer.extend(self.str_buffer.chars());
         self.pos = 0;
         self.line += 1;
@@ -112,14 +116,14 @@ impl<R: BufRead> Lexer<R> {
                     match self.get()? {
                         Some('n') => s.push('\n'),
                         Some(c) => s.push(c),
-                        None => Err("Trailing `\\`")?,
+                        None => Err(LexerError::UnterminatedString(self.line))?,
                     }
                     self.pos += 1;
                 }
                 c => s.push(c),
             }
         }
-        Err("Unterminated string".into())
+        Err(LexerError::UnterminatedString(self.line))?
     }
 
     fn parse_dot(&mut self) -> EResult<Token> {

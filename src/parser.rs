@@ -1,15 +1,14 @@
-use std::error;
 use std::io::BufRead;
 
+use error::{MathError, ParserError, Result as EResult};
 use expressions::Expression;
 use lexer::{Lexer, Token};
 use operators::{BinaryOperator, UnaryOperator};
 
-type Error = Box<dyn error::Error>;
-type EResult<T> = Result<T, Error>;
-
 pub trait Parser: Iterator<Item = EResult<Token>> {
     fn put_back(&mut self, put_back: Token);
+
+    fn line(&self) -> usize;
 
     fn parse_expression(&mut self) -> EResult<Expression> {
         self.parse_expression_1(0)
@@ -37,7 +36,7 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
 
     fn parse_primary(&mut self) -> EResult<Expression> {
         match try_opt!(self.next()) {
-            None => Err("Unexpected end of input")?,
+            None => Err(ParserError::EndOfInput(self.line()))?,
             Some(Token::LeftParen) => self.parse_parentheses(),
             Some(Token::Number(num)) => Ok(Expression::Number(num)),
             Some(tok) => self.parse_unary(tok),
@@ -55,23 +54,15 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
                         use self::Expression::*;
                         match (x, y) {
                             (Number(x), Number(y)) => Ok(Point(x, y)),
-                            (Number(_), Point(..)) => Err(
-                                "Type error: tried to construct a point from a number and a point",
-                            )?,
-                            (Point(..), Number(_)) => Err(
-                                "Type error: tried to construct a point from a point and a number",
-                            )?,
-                            (Point(..), Point(..)) => Err(
-                                "Type error: tried to construct a point from a point and a point",
-                            )?,
+                            _ => Err(MathError::Type)?,
                         }
                     }
-                    Some(_) => Err("Unexpected token")?,
-                    None => Err("Unclosed parentheses")?,
+                    Some(_) => Err(ParserError::Token(self.line()))?,
+                    None => Err(ParserError::Parentheses)?,
                 }
             }
-            Some(_) => Err("Unexpected token")?,
-            None => Err("Unclosed parentheses")?,
+            Some(_) => Err(ParserError::Token(self.line()))?,
+            None => Err(ParserError::Parentheses)?,
         }
     }
 
@@ -80,7 +71,7 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
             let arg = self.parse_expression_1(op.precedence)?;
             op.apply(arg)
         } else {
-            Err("Unexpected token".into())
+            Err(ParserError::Token(self.line()))?
         }
     }
 }
@@ -88,6 +79,10 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
 impl<R: BufRead> Parser for Lexer<R> {
     fn put_back(&mut self, put_back: Token) {
         self.put_back(put_back)
+    }
+
+    fn line(&self) -> usize {
+        self.line()
     }
 }
 

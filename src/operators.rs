@@ -1,11 +1,8 @@
-use std::error;
 use std::ops;
 
+use error::Result as EResult;
 use expressions::Expression;
 use lexer::Token;
-
-type Error = Box<dyn error::Error>;
-type EResult<T> = Result<T, Error>;
 
 pub struct BinaryOperator<'a> {
     pub precedence: usize,
