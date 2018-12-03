@@ -20,7 +20,9 @@ pub trait Parser: Iterator<Item = EResult<Token>> {
         // as long as we encounter operators with precedence >= min_precedence, we can accumulate
         // them into `lhs`.
         while let Some(tok) = try_opt!(self.next()) {
-            if let Some(op) = BinaryOperator::from_builtin(&tok, min_precedence) {
+            if let Some(op) =
+                BinaryOperator::from_builtin(&tok).filter(|op| op.precedence >= min_precedence)
+            {
                 // we have an operator; now to get the right hand side, accumulating operators with
                 // greater precedence than the current one
                 let rhs = self.parse_expression_1(op.precedence + 1)?;

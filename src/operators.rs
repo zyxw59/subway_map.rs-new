@@ -13,11 +13,7 @@ impl<'a> BinaryOperator<'a> {
         (self.function)(lhs, rhs)
     }
 
-    pub fn from_builtin(token: &Token, precedence: usize) -> Option<BinaryOperator<'static>> {
-        BinaryOperator::from_builtin_core(token).filter(|op| op.precedence >= precedence)
-    }
-
-    fn from_builtin_core(token: &Token) -> Option<BinaryOperator<'static>> {
+    pub fn from_builtin(token: &Token) -> Option<BinaryOperator<'static>> {
         match token {
             Token::Tag(tag) => match tag.as_ref() {
                 "+" => Some(BinaryOperator {
