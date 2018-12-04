@@ -10,6 +10,7 @@ mod expressions;
 pub mod lexer;
 mod operators;
 pub mod parser;
+pub mod tables;
 
 fn main() {
     println!("Hello, world!");
