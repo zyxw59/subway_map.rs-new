@@ -3,6 +3,7 @@ use std::io::BufRead;
 use regex_syntax::is_word_character;
 
 use error::{LexerError, Result as EResult};
+use parser::ParserExt;
 
 pub struct Lexer<R> {
     input: R,
@@ -23,14 +24,6 @@ impl<R: BufRead> Lexer<R> {
             line: 0,
             put_back: None,
         }
-    }
-
-    pub fn put_back(&mut self, next: Token) {
-        self.put_back = Some(next)
-    }
-
-    pub fn line(&self) -> usize {
-        self.line
     }
 
     fn get_next_token(&mut self) -> Option<EResult<Token>> {
@@ -229,6 +222,16 @@ impl<R: BufRead> Iterator for Lexer<R> {
             Some(item) => Some(Ok(item)),
             None => self.get_next_token(),
         }
+    }
+}
+
+impl<R: BufRead> ParserExt for Lexer<R> {
+    fn put_back(&mut self, next: Token) {
+        self.put_back = Some(next)
+    }
+
+    fn line(&self) -> usize {
+        self.line
     }
 }
 

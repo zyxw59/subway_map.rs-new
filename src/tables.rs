@@ -9,24 +9,24 @@ pub trait Table<Key: ?Sized, Value> {
 
 pub struct Scoped<'a, T: 'a, K, V> {
     local: HashMap<K, V>,
-    global: Option<&'a T>,
+    global: &'a T,
 }
 
 impl<'a, T, K, V> Scoped<'a, T, K, V>
 where
     K: Hash + Eq,
 {
-    pub fn new() -> Scoped<'static, T, K, V> {
+    pub fn new() -> Scoped<'static, (), K, V> {
         Scoped {
             local: HashMap::new(),
-            global: None,
+            global: &(),
         }
     }
 
     pub fn with_parent(parent: &'a T) -> Scoped<'a, T, K, V> {
         Scoped {
             local: HashMap::new(),
-            global: Some(parent),
+            global: parent,
         }
     }
 
@@ -42,8 +42,12 @@ where
     Q: ?Sized + Hash + Eq,
 {
     fn get(&self, key: &Q) -> Option<&V> {
-        self.local
-            .get(key)
-            .or_else(|| self.global.and_then(|g| g.get(key)))
+        self.local.get(key).or_else(|| self.global.get(key))
+    }
+}
+
+impl<K, V> Table<K, V> for () {
+    fn get(&self, _key: &K) -> Option<&V> {
+        None
     }
 }
