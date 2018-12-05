@@ -1,5 +1,4 @@
 use expressions::{Expression, Result};
-use lexer::Token;
 use tables::Table;
 
 mod builtins {
@@ -33,9 +32,9 @@ mod builtins {
     unary_op!{NEG(2, ops::Neg::neg)}
 }
 
-pub struct Builtins;
+pub struct BinaryBuiltins;
 
-impl<K> Table<K, BinaryOperator<'static>> for Builtins
+impl<K> Table<K, BinaryOperator<'static>> for BinaryBuiltins
 where
     K: ?Sized + AsRef<str>,
 {
@@ -50,7 +49,9 @@ where
     }
 }
 
-impl<K> Table<K, UnaryOperator<'static>> for Builtins
+pub struct UnaryBuiltins;
+
+impl<K> Table<K, UnaryOperator<'static>> for UnaryBuiltins
 where
     K: ?Sized + AsRef<str>,
 {
@@ -71,13 +72,6 @@ impl<'a> BinaryOperator<'a> {
     pub fn apply(&self, lhs: Expression, rhs: Expression) -> Result {
         (self.function)(lhs, rhs)
     }
-
-    pub fn from_builtin(token: &Token) -> Option<&'static BinaryOperator<'static>> {
-        match token {
-            Token::Tag(tag) => Builtins.get(tag),
-            _ => None,
-        }
-    }
 }
 
 pub struct UnaryOperator<'a> {
@@ -88,12 +82,5 @@ pub struct UnaryOperator<'a> {
 impl<'a> UnaryOperator<'a> {
     pub fn apply(&self, argument: Expression) -> Result {
         (self.function)(argument)
-    }
-
-    pub fn from_builtin(token: &Token) -> Option<&'static UnaryOperator<'static>> {
-        match token {
-            Token::Tag(tag) => Builtins.get(tag),
-            _ => None,
-        }
     }
 }

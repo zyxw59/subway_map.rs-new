@@ -7,6 +7,10 @@ pub trait Table<Key: ?Sized, Value> {
     fn get(&self, key: &Key) -> Option<&Value>;
 }
 
+pub trait TableMut<Key, Value>: Table<Key, Value> {
+    fn insert(&mut self, key: Key, value: Value) -> Option<Value>;
+}
+
 pub struct Scoped<'a, T: 'a, K, V> {
     local: HashMap<K, V>,
     global: &'a T,
@@ -43,6 +47,16 @@ where
 {
     fn get(&self, key: &Q) -> Option<&V> {
         self.local.get(key).or_else(|| self.global.get(key))
+    }
+}
+
+impl<'a, T, K, V> TableMut<K, V> for Scoped<'a, T, K, V>
+where
+    T: Table<K, V>,
+    K: Hash + Eq,
+{
+    fn insert(&mut self, key: K, value: V) -> Option<V> {
+        self.local.insert(key, value)
     }
 }
 

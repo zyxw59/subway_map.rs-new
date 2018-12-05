@@ -297,6 +297,13 @@ impl Token {
             _ => None,
         }
     }
+
+    pub fn as_tag(&self) -> Option<&String> {
+        match self {
+            Token::Tag(tag) => Some(tag),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

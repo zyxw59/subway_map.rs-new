@@ -1,21 +1,21 @@
 use error::{ParserError, Result as EResult, Type};
 use expressions::Expression;
 use lexer::Token;
-use operators::{BinaryOperator, UnaryOperator};
-use tables::Table;
+use operators::{BinaryBuiltins, UnaryBuiltins};
+use tables::{Scoped, Table, TableMut};
 
 pub trait ParserExt: Iterator<Item = EResult<Token>> {
     fn put_back(&mut self, put_back: Token);
 
     fn line(&self) -> usize;
 
-    fn into_parser(self) -> Parser<Self, ()>
+    fn into_parser(self) -> Parser<Self, Scoped<'static, (), String, Expression>>
     where
         Self: Sized,
     {
         Parser {
             tokens: self,
-            variables: (),
+            variables: Scoped::<'static, (), String, Expression>::new(),
         }
     }
 }
@@ -28,7 +28,7 @@ pub struct Parser<T, V> {
 impl<T, V> Parser<T, V>
 where
     T: ParserExt,
-    V: Table<String, Expression>,
+    V: TableMut<String, Expression>,
 {
     fn next(&mut self) -> Option<EResult<Token>> {
         self.tokens.next()
@@ -52,8 +52,10 @@ where
         // as long as we encounter operators with precedence >= min_precedence, we can accumulate
         // them into `lhs`.
         while let Some(tok) = try_opt!(self.next()) {
-            if let Some(op) =
-                BinaryOperator::from_builtin(&tok).filter(|op| op.precedence >= min_precedence)
+            if let Some(op) = tok
+                .as_tag()
+                .and_then(|tag| BinaryBuiltins.get(&tag))
+                .filter(|op| op.precedence >= min_precedence)
             {
                 // we have an operator; now to get the right hand side, accumulating operators with
                 // greater precedence than the current one
@@ -75,7 +77,11 @@ where
             None => Err(ParserError::EndOfInput(self.line()))?,
             Some(Token::LeftParen) => self.parse_parentheses(),
             Some(Token::Number(num)) => Ok(Expression::Number(num)),
-            Some(tok) => self.parse_unary(tok),
+            Some(Token::Tag(tag)) => match self.variables.get(&tag) {
+                Some(&exp) => Ok(exp),
+                None => self.parse_unary(&tag),
+            },
+            _ => Err(ParserError::Token(self.line()))?,
         }
     }
 
@@ -108,8 +114,8 @@ where
         }
     }
 
-    fn parse_unary(&mut self, token: Token) -> EResult<Expression> {
-        if let Some(op) = UnaryOperator::from_builtin(&token) {
+    fn parse_unary(&mut self, tag: &String) -> EResult<Expression> {
+        if let Some(op) = UnaryBuiltins.get(tag) {
             let arg = self.parse_expression_1(op.precedence)?;
             op.apply(arg)
                 .map_err(|err| ParserError::Math(err, self.line()).into())
