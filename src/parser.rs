@@ -1,21 +1,23 @@
+use std::collections::HashMap;
+
 use error::{ParserError, Result as EResult, Type};
 use expressions::Expression;
 use lexer::Token;
 use operators::{BinaryBuiltins, UnaryBuiltins};
-use tables::{Scoped, Table, TableMut};
+use tables::{Table, TableMut};
 
 pub trait ParserExt: Iterator<Item = EResult<Token>> {
     fn put_back(&mut self, put_back: Token);
 
     fn line(&self) -> usize;
 
-    fn into_parser(self) -> Parser<Self, Scoped<'static, (), String, Expression>>
+    fn into_parser(self) -> Parser<Self, HashMap<String, Expression>>
     where
         Self: Sized,
     {
         Parser {
             tokens: self,
-            variables: Scoped::<'static, (), String, Expression>::new(),
+            variables: HashMap::<String, Expression>::new(),
         }
     }
 }

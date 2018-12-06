@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 use std::cmp::Eq;
 use std::collections::HashMap;
-use std::hash::Hash;
+use std::hash::{BuildHasher, Hash};
 
 pub trait Table<Key: ?Sized, Value> {
     fn get(&self, key: &Key) -> Option<&Value>;
@@ -11,57 +11,51 @@ pub trait TableMut<Key, Value>: Table<Key, Value> {
     fn insert(&mut self, key: Key, value: Value) -> Option<Value>;
 }
 
-pub struct Scoped<'a, T: 'a, K, V> {
-    local: HashMap<K, V>,
-    global: &'a T,
-}
-
-impl<'a, T, K, V> Scoped<'a, T, K, V>
+impl<K, Q, V, S> Table<Q, V> for HashMap<K, V, S>
 where
-    K: Hash + Eq,
-{
-    pub fn new() -> Scoped<'static, (), K, V> {
-        Scoped {
-            local: HashMap::new(),
-            global: &(),
-        }
-    }
-
-    pub fn with_parent(parent: &'a T) -> Scoped<'a, T, K, V> {
-        Scoped {
-            local: HashMap::new(),
-            global: parent,
-        }
-    }
-
-    pub fn insert(&mut self, key: K, value: V) {
-        self.local.insert(key, value);
-    }
-}
-
-impl<'a, T, K, Q, V> Table<Q, V> for Scoped<'a, T, K, V>
-where
-    T: Table<Q, V>,
     K: Borrow<Q> + Hash + Eq,
     Q: ?Sized + Hash + Eq,
+    S: BuildHasher,
 {
     fn get(&self, key: &Q) -> Option<&V> {
-        self.local.get(key).or_else(|| self.global.get(key))
+        HashMap::get(self, key)
     }
 }
 
-impl<'a, T, K, V> TableMut<K, V> for Scoped<'a, T, K, V>
+impl<K, V, S> TableMut<K, V> for HashMap<K, V, S>
 where
-    T: Table<K, V>,
     K: Hash + Eq,
+    S: BuildHasher,
 {
     fn insert(&mut self, key: K, value: V) -> Option<V> {
-        self.local.insert(key, value)
+        HashMap::insert(self, key, value)
     }
 }
 
 impl<K, V> Table<K, V> for () {
     fn get(&self, _key: &K) -> Option<&V> {
         None
+    }
+}
+
+impl<'a, K, V, T: Table<K, V>> Table<K, V> for &'a T {
+    fn get(&self, key: &K) -> Option<&V> {
+        (*self).get(key)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::{Table, TableMut};
+
+    #[test]
+    fn store_retrieve() {
+        let key = String::from("x");
+        let value = 10;
+        let mut vars = HashMap::new();
+        assert_eq!(TableMut::insert(&mut vars, key, value), None);
+        assert_eq!(Table::get(&vars, "x"), Some(&10));
     }
 }
