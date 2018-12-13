@@ -1,5 +1,9 @@
-use expressions::{Expression, Result};
+use error::MathError;
+use expressions::Expression;
 use tables::Table;
+use values::Value;
+
+type EResult<T> = Result<T, MathError>;
 
 mod builtins {
     use std::ops;
@@ -65,22 +69,36 @@ where
 
 pub struct BinaryOperator<'a> {
     pub precedence: usize,
-    function: &'a dyn Fn(Expression, Expression) -> Result,
+    function: &'a dyn Fn(Value, Value) -> EResult<Value>,
 }
 
 impl<'a> BinaryOperator<'a> {
-    pub fn apply(&self, lhs: Expression, rhs: Expression) -> Result {
+    pub fn apply(&self, lhs: Value, rhs: Value) -> EResult<Value> {
         (self.function)(lhs, rhs)
+    }
+
+    pub fn expression(&'static self, lhs: Expression, rhs: Expression) -> EResult<Expression> {
+        match (lhs, rhs) {
+            (Expression::Value(lhs), Expression::Value(rhs)) => self.apply(lhs, rhs).map(Expression::Value),
+            (lhs, rhs) => Ok(Expression::BinaryOperator(self, Box::new((lhs, rhs)))),
+        }
     }
 }
 
 pub struct UnaryOperator<'a> {
     pub precedence: usize,
-    function: &'a dyn Fn(Expression) -> Result,
+    function: &'a dyn Fn(Value) -> EResult<Value>,
 }
 
 impl<'a> UnaryOperator<'a> {
-    pub fn apply(&self, argument: Expression) -> Result {
+    pub fn apply(&self, argument: Value) -> EResult<Value> {
         (self.function)(argument)
+    }
+
+    pub fn expression(&'static self, argument: Expression) -> EResult<Expression> {
+        match argument {
+            Expression::Value(argument) => self.apply(argument).map(Expression::Value),
+            argument => Ok(Expression::UnaryOperator(self, Box::new(argument))),
+        }
     }
 }

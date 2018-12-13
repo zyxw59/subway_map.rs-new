@@ -3,7 +3,7 @@ use std::result;
 
 use failure::Fail;
 
-use expressions::Expression;
+use values::Value;
 
 pub type Result<T> = result::Result<T, Error>;
 
@@ -64,11 +64,11 @@ pub enum Type {
     Line,
 }
 
-impl From<Expression> for Type {
-    fn from(expr: Expression) -> Type {
+impl From<Value> for Type {
+    fn from(expr: Value) -> Type {
         match expr {
-            Expression::Number(_) => Type::Number,
-            Expression::Point(..) => Type::Point,
+            Value::Number(_) => Type::Number,
+            Value::Point(..) => Type::Point,
         }
     }
 }

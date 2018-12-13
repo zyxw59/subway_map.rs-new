@@ -1,23 +1,24 @@
 use std::collections::HashMap;
 
-use error::{ParserError, Result as EResult, Type};
+use error::{ParserError, Result as EResult};
 use expressions::Expression;
 use lexer::Token;
 use operators::{BinaryBuiltins, UnaryBuiltins};
 use tables::{Table, TableMut};
+use values::Value;
 
 pub trait ParserExt: Iterator<Item = EResult<Token>> {
     fn put_back(&mut self, put_back: Token);
 
     fn line(&self) -> usize;
 
-    fn into_parser(self) -> Parser<Self, HashMap<String, Expression>>
+    fn into_parser(self) -> Parser<Self, HashMap<String, Value>>
     where
         Self: Sized,
     {
         Parser {
             tokens: self,
-            variables: HashMap::<String, Expression>::new(),
+            variables: HashMap::<String, Value>::new(),
         }
     }
 }
@@ -30,7 +31,7 @@ pub struct Parser<T, V> {
 impl<T, V> Parser<T, V>
 where
     T: ParserExt,
-    V: TableMut<String, Expression>,
+    V: TableMut<String, Value>,
 {
     fn next(&mut self) -> Option<EResult<Token>> {
         self.tokens.next()
@@ -63,7 +64,7 @@ where
                 // greater precedence than the current one
                 let rhs = self.parse_expression_1(op.precedence + 1)?;
                 lhs = op
-                    .apply(lhs, rhs)
+                    .expression(lhs, rhs)
                     .map_err(|err| ParserError::Math(err, self.line()))?;
             } else {
                 // the token wasn't an operator, so put it back on the stack
@@ -78,9 +79,9 @@ where
         match try_opt!(self.next()) {
             None => Err(ParserError::EndOfInput(self.line()))?,
             Some(Token::LeftParen) => self.parse_parentheses(),
-            Some(Token::Number(num)) => Ok(Expression::Number(num)),
+            Some(Token::Number(num)) => Ok(Expression::Value(Value::Number(num))),
             Some(Token::Tag(tag)) => match self.variables.get(&tag) {
-                Some(&exp) => Ok(exp),
+                Some(&exp) => Ok(Expression::Value(exp)),
                 None => self.parse_unary(&tag),
             },
             _ => Err(ParserError::Token(self.line()))?,
@@ -96,16 +97,8 @@ where
                 let y = self.parse_expression()?;
                 match try_opt!(self.next()) {
                     Some(Token::RightParen) => {
-                        use self::Expression::*;
-                        match (x, y) {
-                            (Number(x), Number(y)) => Ok(Point(x, y)),
-                            (Number(_), y) => {
-                                Err(ParserError::type_error(Type::Number, y.into(), self.line()))?
-                            }
-                            (x, _) => {
-                                Err(ParserError::type_error(Type::Number, x.into(), self.line()))?
-                            }
-                        }
+                        Expression::point(x, y)
+                            .map_err(|err| ParserError::Math(err, self.line()).into())
                     }
                     Some(_) => Err(ParserError::Token(self.line()))?,
                     None => Err(ParserError::Parentheses(start_line))?,
@@ -119,7 +112,7 @@ where
     fn parse_unary(&mut self, tag: &String) -> EResult<Expression> {
         if let Some(op) = UnaryBuiltins.get(tag) {
             let arg = self.parse_expression_1(op.precedence)?;
-            op.apply(arg)
+            op.expression(arg)
                 .map_err(|err| ParserError::Math(err, self.line()).into())
         } else {
             Err(ParserError::Token(self.line()))?
@@ -129,7 +122,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use expressions::Expression;
+    use values::Value;
     use lexer::Lexer;
 
     use super::ParserExt;
@@ -139,8 +132,9 @@ mod tests {
         let result = Lexer::new("1+2*3+4".as_bytes())
             .into_parser()
             .parse_expression()
-            .unwrap();
-        assert_eq!(result, Expression::Number(11.0));
+            .unwrap()
+            .unwrap_value();
+        assert_eq!(result, Value::Number(11.0));
     }
 
     #[test]
@@ -148,8 +142,9 @@ mod tests {
         let result = Lexer::new("1-2*3+4".as_bytes())
             .into_parser()
             .parse_expression()
-            .unwrap();
-        assert_eq!(result, Expression::Number(-1.0));
+            .unwrap()
+            .unwrap_value();
+        assert_eq!(result, Value::Number(-1.0));
     }
 
     #[test]
@@ -157,8 +152,9 @@ mod tests {
         let result = Lexer::new("1-3/2*5".as_bytes())
             .into_parser()
             .parse_expression()
-            .unwrap();
-        assert_eq!(result, Expression::Number(-6.5));
+            .unwrap()
+            .unwrap_value();
+        assert_eq!(result, Value::Number(-6.5));
     }
 
     #[test]
@@ -166,8 +162,9 @@ mod tests {
         let result = Lexer::new("(1+2)*3+4".as_bytes())
             .into_parser()
             .parse_expression()
-            .unwrap();
-        assert_eq!(result, Expression::Number(13.0));
+            .unwrap()
+            .unwrap_value();
+        assert_eq!(result, Value::Number(13.0));
     }
 
     #[test]
@@ -175,8 +172,9 @@ mod tests {
         let result = Lexer::new("(1,2) + (3,4)".as_bytes())
             .into_parser()
             .parse_expression()
-            .unwrap();
-        assert_eq!(result, Expression::Point(4.0, 6.0));
+            .unwrap()
+            .unwrap_value();
+        assert_eq!(result, Value::Point(4.0, 6.0));
     }
 
     #[test]
@@ -184,8 +182,9 @@ mod tests {
         let result = Lexer::new("(1,2) * (3,4)".as_bytes())
             .into_parser()
             .parse_expression()
-            .unwrap();
-        assert_eq!(result, Expression::Number(11.0));
+            .unwrap()
+            .unwrap_value();
+        assert_eq!(result, Value::Number(11.0));
     }
 
     #[test]
@@ -193,8 +192,9 @@ mod tests {
         let result = Lexer::new("3 * (1,2)".as_bytes())
             .into_parser()
             .parse_expression()
-            .unwrap();
-        assert_eq!(result, Expression::Point(3.0, 6.0));
+            .unwrap()
+            .unwrap_value();
+        assert_eq!(result, Value::Point(3.0, 6.0));
     }
 
     #[test]
@@ -202,8 +202,9 @@ mod tests {
         let result = Lexer::new("3* -2".as_bytes())
             .into_parser()
             .parse_expression()
-            .unwrap();
-        assert_eq!(result, Expression::Number(-6.0));
+            .unwrap()
+            .unwrap_value();
+        assert_eq!(result, Value::Number(-6.0));
     }
 
     #[test]
@@ -211,8 +212,9 @@ mod tests {
         let result = Lexer::new("-2*3".as_bytes())
             .into_parser()
             .parse_expression()
-            .unwrap();
-        assert_eq!(result, Expression::Number(-6.0));
+            .unwrap()
+            .unwrap_value();
+        assert_eq!(result, Value::Number(-6.0));
     }
 
     #[test]
@@ -220,7 +222,8 @@ mod tests {
         let result = Lexer::new("-(1,2)*(3,4)".as_bytes())
             .into_parser()
             .parse_expression()
-            .unwrap();
-        assert_eq!(result, Expression::Number(-11.0));
+            .unwrap()
+            .unwrap_value();
+        assert_eq!(result, Value::Number(-11.0));
     }
 }

@@ -1,78 +1,38 @@
-use std::ops;
 use std::result;
 
 use error::{MathError, Type};
+use operators::{BinaryOperator, UnaryOperator};
+use values::Value;
 
 pub type Result = result::Result<Expression, MathError>;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Function {}
+
 pub enum Expression {
-    Number(f64),
-    Point(f64, f64),
+    Value(Value),
+    Point(Box<(Expression, Expression)>),
+    BinaryOperator(&'static BinaryOperator<'static>, Box<(Expression, Expression)>),
+    UnaryOperator(&'static UnaryOperator<'static>, Box<Expression>),
+    Function(Function, Vec<Expression>),
 }
 
-impl ops::Add for Expression {
-    type Output = Result;
-
-    fn add(self, rhs: Expression) -> Result {
-        use self::Expression::*;
-        Ok(match (self, rhs) {
-            (Number(a), Number(b)) => Number(a + b),
-            (Point(x1, y1), Point(x2, y2)) => Point(x1 + x2, y1 + y2),
-            _ => Err(MathError::Type(self.into(), rhs.into()))?,
-        })
+impl Expression {
+    pub fn point(x: Expression, y: Expression) -> Result {
+        use self::Expression::Value;
+        use self::Value::*;
+        match (x, y) {
+            (Value(Number(x)), Value(Number(y))) => Ok(Value(Point(x, y))),
+            (Value(Number(_)), Value(y)) => Err(MathError::Type(Type::Number, y.into())),
+            (Value(x), _) => Err(MathError::Type(Type::Number, x.into())),
+            (x, y) => Ok(Expression::Point(Box::new((x, y)))),
+        }
     }
-}
 
-impl ops::Sub for Expression {
-    type Output = Result;
-
-    fn sub(self, rhs: Expression) -> Result {
-        use self::Expression::*;
-        Ok(match (self, rhs) {
-            (Number(a), Number(b)) => Number(a - b),
-            (Point(x1, y1), Point(x2, y2)) => Point(x1 - x2, y1 - y2),
-            _ => Err(MathError::Type(self.into(), rhs.into()))?,
-        })
-    }
-}
-
-impl ops::Mul for Expression {
-    type Output = Result;
-
-    fn mul(self, rhs: Expression) -> Result {
-        use self::Expression::*;
-        Ok(match (self, rhs) {
-            (Number(a), Number(b)) => Number(a * b),
-            (Number(a), Point(x, y)) => Point(a * x, a * y),
-            (Point(x, y), Number(a)) => Point(a * x, a * y),
-            (Point(x1, y1), Point(x2, y2)) => Number(x1 * x2 + y1 * y2),
-        })
-    }
-}
-
-impl ops::Div for Expression {
-    type Output = Result;
-
-    fn div(self, rhs: Expression) -> Result {
-        use self::Expression::*;
-        Ok(match (self, rhs) {
-            (_, Number(x)) if x == 0.0 => Err(MathError::DivisionByZero)?,
-            (Number(a), Number(b)) => Number(a / b),
-            (Point(x, y), Number(a)) => Point(x / a, y / a),
-            _ => Err(MathError::Type(Type::Number, rhs.into()))?,
-        })
-    }
-}
-
-impl ops::Neg for Expression {
-    type Output = Result;
-
-    fn neg(self) -> Result {
-        use self::Expression::*;
-        Ok(match self {
-            Number(x) => Number(-x),
-            Point(x, y) => Point(-x, -y),
-        })
+    #[cfg(test)]
+    pub fn unwrap_value(self) -> Value {
+        match self {
+            Expression::Value(value) => value,
+            _ => panic!("`unwrap_value` called on non-value `Expression`"),
+        }
     }
 }
