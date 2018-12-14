@@ -103,10 +103,8 @@ where
             Some(Token::Comma) => {
                 let y = self.parse_expression()?;
                 match try_opt!(self.next()) {
-                    Some(Token::RightParen) => {
-                        Expression::point(x, y)
-                            .map_err(|err| ParserError::Math(err, self.line()).into())
-                    }
+                    Some(Token::RightParen) => Expression::point(x, y)
+                        .map_err(|err| ParserError::Math(err, self.line()).into()),
                     Some(_) => Err(ParserError::Token(self.line()))?,
                     None => Err(ParserError::Parentheses(start_line))?,
                 }
@@ -129,8 +127,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::values::Value;
     use crate::lexer::Lexer;
+    use crate::values::Value;
 
     use super::ParserExt;
 

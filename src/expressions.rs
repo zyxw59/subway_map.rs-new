@@ -18,7 +18,10 @@ pub struct Variable {}
 pub enum Expression {
     Value(Value),
     Point(Box<(Expression, Expression)>),
-    BinaryOperator(&'static BinaryOperator<'static>, Box<(Expression, Expression)>),
+    BinaryOperator(
+        &'static BinaryOperator<'static>,
+        Box<(Expression, Expression)>,
+    ),
     UnaryOperator(&'static UnaryOperator<'static>, Box<Expression>),
     Function(Function, Vec<Expression>),
     Variable(Variable),

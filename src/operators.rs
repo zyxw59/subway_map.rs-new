@@ -19,10 +19,10 @@ mod builtins {
         };
     }
 
-    bin_op!{ADD(1, ops::Add::add)}
-    bin_op!{SUB(1, ops::Sub::sub)}
-    bin_op!{MUL(2, ops::Mul::mul)}
-    bin_op!{DIV(2, ops::Div::div)}
+    bin_op! {ADD(1, ops::Add::add)}
+    bin_op! {SUB(1, ops::Sub::sub)}
+    bin_op! {MUL(2, ops::Mul::mul)}
+    bin_op! {DIV(2, ops::Div::div)}
 
     macro_rules! unary_op {
         ($name:ident ( $prec:expr, $fun:path )) => {
@@ -33,7 +33,7 @@ mod builtins {
         };
     }
 
-    unary_op!{NEG(2, ops::Neg::neg)}
+    unary_op! {NEG(2, ops::Neg::neg)}
 }
 
 pub struct BinaryBuiltins;
@@ -79,7 +79,9 @@ impl<'a> BinaryOperator<'a> {
 
     pub fn expression(&'static self, lhs: Expression, rhs: Expression) -> EResult<Expression> {
         match (lhs, rhs) {
-            (Expression::Value(lhs), Expression::Value(rhs)) => self.apply(lhs, rhs).map(Expression::Value),
+            (Expression::Value(lhs), Expression::Value(rhs)) => {
+                self.apply(lhs, rhs).map(Expression::Value)
+            }
             (lhs, rhs) => Ok(Expression::BinaryOperator(self, Box::new((lhs, rhs)))),
         }
     }

@@ -48,11 +48,7 @@ impl ParserError {
 
 #[derive(Fail, Debug)]
 pub enum MathError {
-    #[fail(
-        display = "A type error occured (expected {:?}, got {:?})",
-        _0,
-        _1
-    )]
+    #[fail(display = "A type error occured (expected {:?}, got {:?})", _0, _1)]
     Type(Type, Type),
     #[fail(display = "Division by zero")]
     DivisionByZero,
@@ -82,11 +78,7 @@ pub enum LexerError {
     UnterminatedString(usize),
     #[fail(display = "Invalid UTF-8 at line {}", _0)]
     Unicode(usize),
-    #[fail(
-        display = "An IO error ({}) occured whil reading line {}",
-        _0,
-        _1
-    )]
+    #[fail(display = "An IO error ({}) occured whil reading line {}", _0, _1)]
     Io(#[cause] io::Error, usize),
 }
 
