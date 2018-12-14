@@ -11,6 +11,17 @@ pub enum Value {
     Point(f64, f64),
 }
 
+impl Value {
+    pub fn point(x: Value, y: Value) -> Result {
+        use self::Value::*;
+        match (x, y) {
+            (Number(x), Number(y)) => Ok(Point(x, y)),
+            (Number(_), y) => Err(MathError::Type(Type::Number, y.into())),
+            (x, _) => Err(MathError::Type(Type::Number, x.into())),
+        }
+    }
+}
+
 impl ops::Add for Value {
     type Output = Result;
 

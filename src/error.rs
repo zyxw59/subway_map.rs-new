@@ -3,6 +3,7 @@ use std::result;
 
 use failure::Fail;
 
+use crate::expressions::Variable;
 use crate::values::Value;
 
 pub type Result<T> = result::Result<T, Error>;
@@ -55,6 +56,8 @@ pub enum MathError {
     Type(Type, Type),
     #[fail(display = "Division by zero")]
     DivisionByZero,
+    #[fail(display = "Undefined variable {:?}", _0)]
+    Variable(Variable),
 }
 
 #[derive(Debug)]

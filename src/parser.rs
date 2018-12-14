@@ -45,6 +45,13 @@ where
         self.tokens.line()
     }
 
+    pub fn parse_value(&mut self) -> EResult<Value> {
+        self.parse_expression_1(0).and_then(|exp| {
+            exp.evaluate()
+                .map_err(|err| ParserError::Math(err, self.line()).into())
+        })
+    }
+
     pub fn parse_expression(&mut self) -> EResult<Expression> {
         self.parse_expression_1(0)
     }
@@ -131,9 +138,8 @@ mod tests {
     fn basic_arithmetic() {
         let result = Lexer::new("1+2*3+4".as_bytes())
             .into_parser()
-            .parse_expression()
-            .unwrap()
-            .unwrap_value();
+            .parse_value()
+            .unwrap();
         assert_eq!(result, Value::Number(11.0));
     }
 
@@ -141,9 +147,8 @@ mod tests {
     fn basic_arithmetic_2() {
         let result = Lexer::new("1-2*3+4".as_bytes())
             .into_parser()
-            .parse_expression()
-            .unwrap()
-            .unwrap_value();
+            .parse_value()
+            .unwrap();
         assert_eq!(result, Value::Number(-1.0));
     }
 
@@ -151,9 +156,8 @@ mod tests {
     fn basic_arithmetic_3() {
         let result = Lexer::new("1-3/2*5".as_bytes())
             .into_parser()
-            .parse_expression()
-            .unwrap()
-            .unwrap_value();
+            .parse_value()
+            .unwrap();
         assert_eq!(result, Value::Number(-6.5));
     }
 
@@ -161,9 +165,8 @@ mod tests {
     fn parentheses() {
         let result = Lexer::new("(1+2)*3+4".as_bytes())
             .into_parser()
-            .parse_expression()
-            .unwrap()
-            .unwrap_value();
+            .parse_value()
+            .unwrap();
         assert_eq!(result, Value::Number(13.0));
     }
 
@@ -171,9 +174,8 @@ mod tests {
     fn points() {
         let result = Lexer::new("(1,2) + (3,4)".as_bytes())
             .into_parser()
-            .parse_expression()
-            .unwrap()
-            .unwrap_value();
+            .parse_value()
+            .unwrap();
         assert_eq!(result, Value::Point(4.0, 6.0));
     }
 
@@ -181,9 +183,8 @@ mod tests {
     fn dot_product() {
         let result = Lexer::new("(1,2) * (3,4)".as_bytes())
             .into_parser()
-            .parse_expression()
-            .unwrap()
-            .unwrap_value();
+            .parse_value()
+            .unwrap();
         assert_eq!(result, Value::Number(11.0));
     }
 
@@ -191,9 +192,8 @@ mod tests {
     fn scalar_product() {
         let result = Lexer::new("3 * (1,2)".as_bytes())
             .into_parser()
-            .parse_expression()
-            .unwrap()
-            .unwrap_value();
+            .parse_value()
+            .unwrap();
         assert_eq!(result, Value::Point(3.0, 6.0));
     }
 
@@ -201,9 +201,8 @@ mod tests {
     fn unary_minus() {
         let result = Lexer::new("3* -2".as_bytes())
             .into_parser()
-            .parse_expression()
-            .unwrap()
-            .unwrap_value();
+            .parse_value()
+            .unwrap();
         assert_eq!(result, Value::Number(-6.0));
     }
 
@@ -211,9 +210,8 @@ mod tests {
     fn unary_minus_2() {
         let result = Lexer::new("-2*3".as_bytes())
             .into_parser()
-            .parse_expression()
-            .unwrap()
-            .unwrap_value();
+            .parse_value()
+            .unwrap();
         assert_eq!(result, Value::Number(-6.0));
     }
 
@@ -221,9 +219,8 @@ mod tests {
     fn unary_minus_3() {
         let result = Lexer::new("-(1,2)*(3,4)".as_bytes())
             .into_parser()
-            .parse_expression()
-            .unwrap()
-            .unwrap_value();
+            .parse_value()
+            .unwrap();
         assert_eq!(result, Value::Number(-11.0));
     }
 }
