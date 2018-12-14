@@ -3,7 +3,7 @@ use std::result;
 
 use failure::Fail;
 
-use values::Value;
+use crate::values::Value;
 
 pub type Result<T> = result::Result<T, Error>;
 

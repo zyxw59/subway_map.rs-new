@@ -1,8 +1,8 @@
 use std::result;
 
-use error::{MathError, Type};
-use operators::{BinaryOperator, UnaryOperator};
-use values::Value;
+use crate::error::{MathError, Type};
+use crate::operators::{BinaryOperator, UnaryOperator};
+use crate::values::Value;
 
 pub type Result = result::Result<Expression, MathError>;
 

@@ -1,7 +1,7 @@
-use error::MathError;
-use expressions::Expression;
-use tables::Table;
-use values::Value;
+use crate::error::MathError;
+use crate::expressions::Expression;
+use crate::tables::Table;
+use crate::values::Value;
 
 type EResult<T> = Result<T, MathError>;
 

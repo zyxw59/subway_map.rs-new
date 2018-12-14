@@ -2,8 +2,8 @@ use std::io::BufRead;
 
 use regex_syntax::is_word_character;
 
-use error::{LexerError, Result as EResult};
-use parser::ParserExt;
+use crate::error::{LexerError, Result as EResult};
+use crate::parser::ParserExt;
 
 pub struct Lexer<R> {
     input: R,

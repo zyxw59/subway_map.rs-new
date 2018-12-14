@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use error::{ParserError, Result as EResult};
-use expressions::Expression;
-use lexer::Token;
-use operators::{BinaryBuiltins, UnaryBuiltins};
-use tables::{Table, TableMut};
-use values::Value;
+use crate::error::{ParserError, Result as EResult};
+use crate::expressions::Expression;
+use crate::lexer::Token;
+use crate::operators::{BinaryBuiltins, UnaryBuiltins};
+use crate::tables::{Table, TableMut};
+use crate::values::Value;
 
 pub trait ParserExt: Iterator<Item = EResult<Token>> {
     fn put_back(&mut self, put_back: Token);
@@ -122,8 +122,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use values::Value;
-    use lexer::Lexer;
+    use crate::values::Value;
+    use crate::lexer::Lexer;
 
     use super::ParserExt;
 

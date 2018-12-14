@@ -1,7 +1,7 @@
 use std::ops;
 use std::result;
 
-use error::{MathError, Type};
+use crate::error::{MathError, Type};
 
 pub type Result = result::Result<Value, MathError>;
 
