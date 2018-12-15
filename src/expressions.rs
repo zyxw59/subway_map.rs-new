@@ -55,27 +55,4 @@ impl Expression {
             Expression::Variable(v) => Err(MathError::Variable(v))?,
         })
     }
-
-    /// Finds the first `Variable` in the expression tree, or `None` if there are none.
-    pub fn find_variable(self) -> Option<Variable> {
-        use self::Expression::*;
-        match self {
-            Value(_) => None,
-            Point(p) | BinaryOperator(_, p) => {
-                let (x, y) = *p;
-                x.find_variable().or_else(|| y.find_variable())
-            }
-            UnaryOperator(_, x) => x.find_variable(),
-            Function(_, v) => v.into_iter().filter_map(|x| x.find_variable()).next(),
-            Variable(v) => Some(v),
-        }
-    }
-
-    #[cfg(test)]
-    pub fn unwrap_value(self) -> Value {
-        match self {
-            Expression::Value(value) => value,
-            _ => panic!("`unwrap_value` called on non-value `Expression`"),
-        }
-    }
 }

@@ -52,7 +52,7 @@ where
         })
     }
 
-    pub fn parse_expression(&mut self) -> EResult<Expression> {
+    fn parse_expression(&mut self) -> EResult<Expression> {
         self.parse_expression_1(0)
     }
 
