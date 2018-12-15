@@ -89,9 +89,9 @@ where
             Some(Token::Number(num)) => Ok(Expression::Value(Value::Number(num))),
             Some(Token::Tag(tag)) => match self.variables.get(&tag) {
                 Some(&exp) => Ok(Expression::Value(exp)),
-                None => self.parse_unary(&tag),
+                None => self.parse_unary(tag),
             },
-            _ => Err(ParserError::Token(self.line()))?,
+            Some(tok) => Err(ParserError::Token(tok, self.line()))?,
         }
     }
 
@@ -105,22 +105,22 @@ where
                 match try_opt!(self.next()) {
                     Some(Token::RightParen) => Expression::point(x, y)
                         .map_err(|err| ParserError::Math(err, self.line()).into()),
-                    Some(_) => Err(ParserError::Token(self.line()))?,
+                    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
                     None => Err(ParserError::Parentheses(start_line))?,
                 }
             }
-            Some(_) => Err(ParserError::Token(self.line()))?,
+            Some(tok) => Err(ParserError::Token(tok, self.line()))?,
             None => Err(ParserError::Parentheses(start_line))?,
         }
     }
 
-    fn parse_unary(&mut self, tag: &String) -> EResult<Expression> {
-        if let Some(op) = UnaryBuiltins.get(tag) {
+    fn parse_unary(&mut self, tag: String) -> EResult<Expression> {
+        if let Some(op) = UnaryBuiltins.get(&tag) {
             let arg = self.parse_expression_1(op.precedence)?;
             op.expression(arg)
                 .map_err(|err| ParserError::Math(err, self.line()).into())
         } else {
-            Err(ParserError::Token(self.line()))?
+            Err(ParserError::Token(Token::Tag(tag), self.line()))?
         }
     }
 }

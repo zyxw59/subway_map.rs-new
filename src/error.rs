@@ -4,6 +4,7 @@ use std::result;
 use failure::Fail;
 
 use crate::expressions::Variable;
+use crate::lexer::Token;
 use crate::values::Value;
 
 pub type Result<T> = result::Result<T, Error>;
@@ -32,8 +33,8 @@ impl From<LexerError> for Error {
 pub enum ParserError {
     #[fail(display = "Unexpected end of input on line {}", _0)]
     EndOfInput(usize),
-    #[fail(display = "Unexpected token on line {}", _0)]
-    Token(usize),
+    #[fail(display = "Unexpected token {:?} on line {}", _0, _1)]
+    Token(Token, usize),
     #[fail(display = "Unclosed parentheses starting on line {}", _0)]
     Parentheses(usize),
     #[fail(display = "A math error ({}) occured on line {}", _0, _1)]
