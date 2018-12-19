@@ -45,9 +45,21 @@ where
         self.tokens.line()
     }
 
+    fn parse_statement(&mut self) -> EResult<()> {
+        match try_opt!(self.next()) {
+            // tag; start of an assignment expression or function definition
+            Some(Token::Tag(tag)) => unimplemented!(),
+            // other token; unexpected
+            Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+            // empty statement, do nothing
+            None => {}
+        };
+        Ok(())
+    }
+
     pub fn parse_value(&mut self) -> EResult<Value> {
         self.parse_expression_1(0).and_then(|exp| {
-            exp.evaluate()
+            exp.evaluate(&self.variables)
                 .map_err(|err| ParserError::Math(err, self.line()).into())
         })
     }

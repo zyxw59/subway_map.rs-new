@@ -1,5 +1,6 @@
 use crate::error::{MathError, Type};
 use crate::operators::{BinaryOperator, UnaryOperator};
+use crate::tables::Table;
 use crate::values::Value;
 
 pub type EResult<T> = Result<T, MathError>;
@@ -7,13 +8,12 @@ pub type EResult<T> = Result<T, MathError>;
 pub struct Function {}
 
 impl Function {
-    fn apply(self, args: Vec<Expression>) -> EResult<Value> {
+    fn apply(&self, args: &Vec<Expression>) -> EResult<Value> {
         unimplemented!();
     }
 }
 
-#[derive(Debug)]
-pub struct Variable {}
+pub type Variable = String;
 
 pub enum Expression {
     Value(Value),
@@ -39,20 +39,23 @@ impl Expression {
         }
     }
 
-    pub fn evaluate(self) -> EResult<Value> {
+    pub fn evaluate(&self, vars: &impl Table<String, Value>) -> EResult<Value> {
         Ok(match self {
-            Expression::Value(v) => v,
+            Expression::Value(v) => *v,
             Expression::Point(p) => {
-                let (x, y) = *p;
-                Value::point(x.evaluate()?, y.evaluate()?)?
+                let (x, y) = p.as_ref();
+                Value::point(x.evaluate(vars)?, y.evaluate(vars)?)?
             }
             Expression::BinaryOperator(op, args) => {
-                let (lhs, rhs) = *args;
-                op.apply(lhs.evaluate()?, rhs.evaluate()?)?
+                let (lhs, rhs) = args.as_ref();
+                op.apply(lhs.evaluate(vars)?, rhs.evaluate(vars)?)?
             }
-            Expression::UnaryOperator(op, arg) => op.apply(arg.evaluate()?)?,
+            Expression::UnaryOperator(op, arg) => op.apply(arg.evaluate(vars)?)?,
             Expression::Function(func, args) => func.apply(args)?,
-            Expression::Variable(v) => Err(MathError::Variable(v))?,
+            Expression::Variable(var) => match vars.get(&var) {
+                None => Err(MathError::Variable(var.clone()))?,
+                Some(val) => *val,
+            },
         })
     }
 }
