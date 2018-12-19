@@ -26,6 +26,14 @@ impl<R: BufRead> Lexer<R> {
         }
     }
 
+    fn get_current_char(&self) -> Option<char> {
+        self.vec_buffer.get(self.pos).cloned()
+    }
+
+    fn get_next_char(&self) -> Option<char> {
+        self.vec_buffer.get(self.pos + 1).cloned()
+    }
+
     fn get_next_token(&mut self) -> Option<EResult<Token>> {
         itry!(self.skip_whitespace_and_comments());
         itry!(self.get()).map(|c| match c.into() {
@@ -57,14 +65,14 @@ impl<R: BufRead> Lexer<R> {
     ///
     /// If the buffer is still empty after `fill_buffer`, returns `None`, indicating end of input.
     fn get(&mut self) -> EResult<Option<char>> {
-        Ok(match self.vec_buffer.get(self.pos).cloned() {
+        Ok(match self.get_current_char() {
             // if we've got a character, here it is
             Some(c) => Some(c),
             // if we don't, check if we can get a new buffer
             None => {
                 self.fill_buffer()?;
                 // and return the new character, if any
-                self.vec_buffer.get(self.pos).cloned()
+                self.get_current_char()
             }
         })
     }
@@ -120,12 +128,7 @@ impl<R: BufRead> Lexer<R> {
     }
 
     fn parse_dot(&mut self) -> EResult<Token> {
-        match self
-            .vec_buffer
-            .get(self.pos + 1)
-            .cloned()
-            .map(CharCat::from)
-        {
+        match self.get_next_char().map(CharCat::from) {
             Some(CharCat::Number) => self.parse_number(),
             _ => self.parse_other(CharCat::Dot),
         }
