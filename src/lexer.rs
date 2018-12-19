@@ -213,7 +213,10 @@ impl<R: BufRead> Lexer<R> {
                 break;
             }
         }
-        Ok(Token::Tag(tag))
+        match tag.as_ref() {
+            "=" => Ok(Token::Equal),
+            _ => Ok(Token::Tag(tag)),
+        }
     }
 }
 
@@ -288,6 +291,8 @@ pub enum Token {
     Comma,
     /// A semicolon
     Semicolon,
+    /// A single equals sign
+    Equal,
 }
 
 impl Token {
@@ -376,5 +381,29 @@ mod tests {
         let lexer = Lexer::new("\"foo\nbar\"".as_bytes());
         let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(tokens, [Token::String("foo\nbar".into())]);
+    }
+
+    #[test]
+    fn equal() {
+        let lexer = Lexer::new("a=b".as_bytes());
+        let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(
+            tokens,
+            [Token::Tag("a".into()), Token::Equal, Token::Tag("b".into())]
+        );
+    }
+
+    #[test]
+    fn equal_2() {
+        let lexer = Lexer::new("a==b".as_bytes());
+        let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(
+            tokens,
+            [
+                Token::Tag("a".into()),
+                Token::Tag("==".into()),
+                Token::Tag("b".into())
+            ]
+        );
     }
 }

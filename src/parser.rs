@@ -45,16 +45,41 @@ where
         self.tokens.line()
     }
 
-    fn parse_statement(&mut self) -> EResult<()> {
+    /// Parse and evaluate a statement.
+    ///
+    /// The `Ok` value indicates whether there are more statements remaining (i.e. whether this
+    /// statement ended with a `;`).
+    fn parse_statement(&mut self) -> EResult<bool> {
         match try_opt!(self.next()) {
             // tag; start of an assignment expression or function definition
-            Some(Token::Tag(tag)) => unimplemented!(),
+            Some(Token::Tag(tag)) => {
+                match try_opt!(self.next()) {
+                    // assignment
+                    Some(Token::Equal) => {
+                        let value = self.parse_value()?;
+                        self.variables.insert(tag, value);
+                    }
+                    // function definition
+                    Some(Token::LeftParen) => unimplemented!(),
+                    // other token; unexpected
+                    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                    // unexpected end of input
+                    None => Err(ParserError::EndOfInput(self.line()))?,
+                };
+                match try_opt!(self.next()) {
+                    // end of statement
+                    Some(Token::Semicolon) => Ok(true),
+                    // end of input (also acceptable)
+                    None => Ok(false),
+                    // other token; unexpected
+                    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                }
+            }
             // other token; unexpected
             Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-            // empty statement, do nothing
-            None => {}
-        };
-        Ok(())
+            // empty statement, end of input
+            None => Ok(false),
+        }
     }
 
     pub fn parse_value(&mut self) -> EResult<Value> {
@@ -232,5 +257,20 @@ mod tests {
             .parse_value()
             .unwrap();
         assert_eq!(result, Value::Number(-11.0));
+    }
+
+    #[test]
+    fn variables_set() {
+        let mut parser = Lexer::new("x = 1".as_bytes()).into_parser();
+        assert!(!parser.parse_statement().unwrap());
+        assert_eq!(parser.variables.get("x"), Some(&Value::Number(1.0)));
+    }
+
+    #[test]
+    fn variables_get() {
+        let mut parser = Lexer::new("x = 1; z = x * 2".as_bytes()).into_parser();
+        while parser.parse_statement().unwrap() {}
+        assert_eq!(parser.variables.get("x"), Some(&Value::Number(1.0)));
+        assert_eq!(parser.variables.get("z"), Some(&Value::Number(2.0)));
     }
 }
