@@ -55,15 +55,6 @@ version = "0.2.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "parser_test"
-version = "0.1.0"
-dependencies = [
- "failure 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "regex-syntax 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "0.4.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -91,6 +82,15 @@ dependencies = [
 name = "rustc-demangle"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "subway_map"
+version = "0.1.0"
+dependencies = [
+ "failure 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "failure_derive 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "regex-syntax 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
+]
 
 [[package]]
 name = "syn"
