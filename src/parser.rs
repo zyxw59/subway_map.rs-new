@@ -134,7 +134,7 @@ where
                         let start_line = self.line();
                         let args = self.parse_comma_list()?;
                         match try_opt!(self.next()) {
-                            Some(Token::RightParen) => {},
+                            Some(Token::RightParen) => {}
                             Some(tok) => Err(ParserError::Token(tok, self.line()))?,
                             None => Err(ParserError::Parentheses(start_line))?,
                         };
