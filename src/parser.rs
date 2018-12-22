@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 
 use crate::error::{ParserError, Result as EResult};
-use crate::expressions::Expression;
+use crate::expressions::{Expression, Function};
 use crate::lexer::Token;
 use crate::operators::{BinaryBuiltins, UnaryBuiltins};
 use crate::tables::{Table, TableMut};
@@ -12,26 +12,52 @@ pub trait ParserExt: Iterator<Item = EResult<Token>> {
 
     fn line(&self) -> usize;
 
-    fn into_parser(self) -> Parser<Self, HashMap<String, Value>>
+    fn into_parser(self) -> Parser<Self, HashMap<String, Value>, HashMap<String, Function>>
     where
         Self: Sized,
     {
         Parser {
             tokens: self,
             variables: HashMap::<String, Value>::new(),
+            functions: HashMap::<String, Function>::new(),
         }
     }
 }
 
-pub struct Parser<T, V> {
-    tokens: T,
-    variables: V,
+impl<'a, T> ParserExt for &'a mut T
+where
+    T: ParserExt,
+{
+    fn put_back(&mut self, put_back: Token) {
+        (**self).put_back(put_back);
+    }
+
+    fn line(&self) -> usize {
+        (**self).line()
+    }
 }
 
-impl<T, V> Parser<T, V>
+macro_rules! expect {
+    ($self:ident, $token:pat) => {
+        match try_opt!($self.next()) {
+            Some($token) => {}
+            Some(tok) => Err(ParserError::Token(tok, $self.line()))?,
+            None => Err(ParserError::EndOfInput($self.line()))?,
+        }
+    };
+}
+
+pub struct Parser<T, V, F> {
+    tokens: T,
+    variables: V,
+    functions: F,
+}
+
+impl<T, V, F> Parser<T, V, F>
 where
     T: ParserExt,
     V: Table<String, Value>,
+    F: Table<String, Function>,
 {
     fn next(&mut self) -> Option<EResult<Token>> {
         self.tokens.next()
@@ -43,6 +69,16 @@ where
 
     fn line(&self) -> usize {
         self.tokens.line()
+    }
+
+    /// Returns a parser in which all variables are undefined, in order to produce an expression
+    /// tree that can be evaluated with a different set of variable values than the current one.
+    fn function_def_parser(&mut self) -> Parser<&mut T, (), ()> {
+        Parser {
+            tokens: &mut self.tokens,
+            variables: (),
+            functions: (),
+        }
     }
 
     pub fn parse_value(&mut self) -> EResult<Value> {
@@ -91,10 +127,20 @@ where
                 Some(op) => op
                     .expression(self.parse_expression_1(op.precedence)?)
                     .map_err(|err| ParserError::Math(err, self.line()).into()),
-                None => match self.variables.get(&tag) {
-                    Some(&value) => Ok(Expression::Value(value)),
-                    None => Ok(Expression::Variable(tag)),
-                },
+                None => {
+                    let next_tok = try_opt!(self.next());
+                    if let Some(Token::LeftParen) = next_tok {
+                        unimplemented!();
+                    } else {
+                        if let Some(tok) = next_tok {
+                            self.put_back(tok);
+                        }
+                        match self.variables.get(&tag) {
+                            Some(&value) => Ok(Expression::Value(value)),
+                            None => Ok(Expression::Variable(tag)),
+                        }
+                    }
+                }
             },
             Some(tok) => Err(ParserError::Token(tok, self.line()))?,
         }
@@ -136,10 +182,11 @@ where
     }
 }
 
-impl<T, V> Parser<T, V>
+impl<T, V, F> Parser<T, V, F>
 where
     T: ParserExt,
     V: TableMut<String, Value>,
+    F: TableMut<String, Function>,
 {
     /// Parse and evaluate a statement.
     ///
@@ -156,7 +203,48 @@ where
                         self.variables.insert(tag, value);
                     }
                     // function definition
-                    Some(Token::LeftParen) => unimplemented!(),
+                    Some(Token::LeftParen) => {
+                        // maps argument names to their index in the function signature
+                        let mut args = HashMap::new();
+                        let mut index = 0;
+                        let start_line = self.line();
+                        loop {
+                            match try_opt!(self.next()) {
+                                // a named argument
+                                Some(Token::Tag(arg)) => {
+                                    // insert the new argument into the hashmap
+                                    match args.entry(arg) {
+                                        // there's already an argument with this name
+                                        Entry::Occupied(e) => {
+                                            return Err(ParserError::Argument(
+                                                tag,
+                                                e.remove_entry().0,
+                                                self.line(),
+                                            )
+                                            .into());
+                                        }
+                                        Entry::Vacant(e) => e.insert(index),
+                                    };
+                                    index += 1;
+                                    match try_opt!(self.next()) {
+                                        Some(Token::Comma) => {}
+                                        Some(Token::RightParen) => break,
+                                        Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                                        None => Err(ParserError::Parentheses(start_line))?,
+                                    }
+                                }
+                                // end of the arguments
+                                Some(Token::RightParen) => break,
+                                Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                                None => Err(ParserError::Parentheses(start_line))?,
+                            }
+                        }
+                        expect!(self, Token::Equal);
+                        // get the function body, as an expression tree
+                        let expression = Box::new(self.function_def_parser().parse_expression()?);
+                        let func = Function { args, expression };
+                        self.functions.insert(tag, func);
+                    }
                     // other token; unexpected
                     Some(tok) => Err(ParserError::Token(tok, self.line()))?,
                     // unexpected end of input

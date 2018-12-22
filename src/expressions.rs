@@ -1,15 +1,38 @@
+use std::collections::HashMap;
+
 use crate::error::{MathError, Type};
 use crate::operators::{BinaryOperator, UnaryOperator};
-use crate::tables::Table;
+use crate::tables::{Chain, Table};
 use crate::values::Value;
 
 pub type EResult<T> = Result<T, MathError>;
 
-pub struct Function {}
+pub struct Function {
+    pub args: HashMap<Variable, usize>,
+    pub expression: Box<Expression>,
+}
 
 impl Function {
-    fn apply(&self, args: &Vec<Expression>) -> EResult<Value> {
-        unimplemented!();
+    fn apply(&self, args: &Vec<Expression>, vars: &impl Table<String, Value>) -> EResult<Value> {
+        let locals = ArgTable {
+            order: &self.args,
+            args: args
+                .iter()
+                .map(|arg| arg.evaluate(vars))
+                .collect::<EResult<Vec<Value>>>()?,
+        };
+        self.expression.evaluate(&Chain(&locals, vars))
+    }
+}
+
+struct ArgTable<'a> {
+    order: &'a HashMap<Variable, usize>,
+    args: Vec<Value>,
+}
+
+impl Table<Variable, Value> for ArgTable<'_> {
+    fn get(&self, key: &Variable) -> Option<&Value> {
+        self.order.get(key).and_then(|&i| self.args.get(i))
     }
 }
 
@@ -51,7 +74,7 @@ impl Expression {
                 op.apply(lhs.evaluate(vars)?, rhs.evaluate(vars)?)?
             }
             Expression::UnaryOperator(op, arg) => op.apply(arg.evaluate(vars)?)?,
-            Expression::Function(func, args) => func.apply(args)?,
+            Expression::Function(func, args) => func.apply(args, vars)?,
             Expression::Variable(var) => match vars.get(&var) {
                 None => Err(MathError::Variable(var.clone()))?,
                 Some(val) => *val,

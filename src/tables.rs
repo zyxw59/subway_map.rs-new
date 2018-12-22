@@ -44,6 +44,14 @@ impl<'a, K, V, T: Table<K, V>> Table<K, V> for &'a T {
     }
 }
 
+pub struct Chain<'a, 'b, K: ?Sized, V>(pub &'a dyn Table<K, V>, pub &'b dyn Table<K, V>);
+
+impl<'a, 'b, K: ?Sized, V> Table<K, V> for Chain<'a, 'b, K, V> {
+    fn get(&self, key: &K) -> Option<&V> {
+        self.0.get(key).or_else(|| self.1.get(key))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;

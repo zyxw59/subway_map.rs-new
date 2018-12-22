@@ -42,6 +42,8 @@ pub enum ParserError {
         _1, _0
     )]
     ParenList(usize, usize),
+    #[fail(display = "Repeated argument {} to function {} on line {}", _0, _1, _2)]
+    Argument(String, String, usize),
     #[fail(display = "A math error ({}) occured on line {}", _0, _1)]
     Math(#[cause] MathError, usize),
 }
