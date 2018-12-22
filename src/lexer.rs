@@ -57,7 +57,9 @@ impl<R: BufRead> Lexer<R> {
             .map_err(|err| LexerError::from_io(err, self.line))?;
         self.vec_buffer.extend(self.str_buffer.chars());
         self.pos = 0;
-        self.line += 1;
+        if !self.vec_buffer.is_empty() {
+            self.line += 1;
+        }
         Ok(self.vec_buffer.len())
     }
 
