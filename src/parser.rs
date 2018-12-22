@@ -1,7 +1,7 @@
 use std::collections::{hash_map::Entry, HashMap};
 
 use crate::error::{ParserError, Result as EResult};
-use crate::expressions::{Expression, Function};
+use crate::expressions::{Expression, Function, Variable};
 use crate::lexer::Token;
 use crate::operators::{BinaryBuiltins, UnaryBuiltins};
 use crate::tables::{Table, TableMut};
@@ -12,14 +12,14 @@ pub trait ParserExt: Iterator<Item = EResult<Token>> {
 
     fn line(&self) -> usize;
 
-    fn into_parser(self) -> Parser<Self, HashMap<String, Value>, HashMap<String, Function>>
+    fn into_parser(self) -> Parser<Self, HashMap<Variable, Value>, HashMap<Variable, Function>>
     where
         Self: Sized,
     {
         Parser {
             tokens: self,
-            variables: HashMap::<String, Value>::new(),
-            functions: HashMap::<String, Function>::new(),
+            variables: HashMap::<Variable, Value>::new(),
+            functions: HashMap::<Variable, Function>::new(),
         }
     }
 }
@@ -56,8 +56,8 @@ pub struct Parser<T, V, F> {
 impl<T, V, F> Parser<T, V, F>
 where
     T: ParserExt,
-    V: Table<String, Value>,
-    F: Table<String, Function>,
+    V: Table<Variable, Value>,
+    F: Table<Variable, Function>,
 {
     fn next(&mut self) -> Option<EResult<Token>> {
         self.tokens.next()
@@ -83,7 +83,7 @@ where
 
     pub fn parse_value(&mut self) -> EResult<Value> {
         self.parse_expression_1(0).and_then(|exp| {
-            exp.evaluate(&self.variables)
+            exp.evaluate(&self.variables, &self.functions)
                 .map_err(|err| ParserError::Math(err, self.line()).into())
         })
     }
@@ -130,7 +130,15 @@ where
                 None => {
                     let next_tok = try_opt!(self.next());
                     if let Some(Token::LeftParen) = next_tok {
-                        unimplemented!();
+                        // function call
+                        let start_line = self.line();
+                        let args = self.parse_comma_list()?;
+                        match try_opt!(self.next()) {
+                            Some(Token::RightParen) => {},
+                            Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                            None => Err(ParserError::Parentheses(start_line))?,
+                        };
+                        Ok(Expression::Function(tag, args))
                     } else {
                         if let Some(tok) = next_tok {
                             self.put_back(tok);
@@ -185,8 +193,8 @@ where
 impl<T, V, F> Parser<T, V, F>
 where
     T: ParserExt,
-    V: TableMut<String, Value>,
-    F: TableMut<String, Function>,
+    V: TableMut<Variable, Value>,
+    F: TableMut<Variable, Function>,
 {
     /// Parse and evaluate a statement.
     ///
@@ -241,7 +249,7 @@ where
                         }
                         expect!(self, Token::Equal);
                         // get the function body, as an expression tree
-                        let expression = Box::new(self.function_def_parser().parse_expression()?);
+                        let expression = self.function_def_parser().parse_expression()?;
                         let func = Function { args, expression };
                         self.functions.insert(tag, func);
                     }
@@ -377,5 +385,19 @@ mod tests {
         while parser.parse_statement().unwrap() {}
         assert_eq!(parser.variables.get("x"), Some(&Value::Number(1.0)));
         assert_eq!(parser.variables.get("z"), Some(&Value::Number(2.0)));
+    }
+
+    #[test]
+    fn functions() {
+        let mut parser = Lexer::new("f(x) = x + 1; y = f(3)".as_bytes()).into_parser();
+        while parser.parse_statement().unwrap() {}
+        assert_eq!(parser.variables.get("y"), Some(&Value::Number(4.0)));
+    }
+
+    #[test]
+    fn functions_2() {
+        let mut parser = Lexer::new("f(x, y) = x * y; z = f(3, 2)".as_bytes()).into_parser();
+        while parser.parse_statement().unwrap() {}
+        assert_eq!(parser.variables.get("z"), Some(&Value::Number(6.0)));
     }
 }

@@ -9,19 +9,29 @@ pub type EResult<T> = Result<T, MathError>;
 
 pub struct Function {
     pub args: HashMap<Variable, usize>,
-    pub expression: Box<Expression>,
+    pub expression: Expression,
 }
 
 impl Function {
-    fn apply(&self, args: &Vec<Expression>, vars: &impl Table<String, Value>) -> EResult<Value> {
+    fn apply(
+        &self,
+        args: &Vec<Expression>,
+        vars: &impl Table<Variable, Value>,
+        funcs: &impl Table<Variable, Function>,
+    ) -> EResult<Value> {
+        let expected = self.args.len();
+        let got = args.len();
+        if expected != got {
+            return Err(MathError::Arguments(expected, got));
+        }
         let locals = ArgTable {
             order: &self.args,
             args: args
                 .iter()
-                .map(|arg| arg.evaluate(vars))
+                .map(|arg| arg.evaluate(vars, funcs))
                 .collect::<EResult<Vec<Value>>>()?,
         };
-        self.expression.evaluate(&Chain(&locals, vars))
+        self.expression.evaluate(&Chain(&locals, vars), funcs)
     }
 }
 
@@ -46,7 +56,7 @@ pub enum Expression {
         Box<(Expression, Expression)>,
     ),
     UnaryOperator(&'static UnaryOperator<'static>, Box<Expression>),
-    Function(Function, Vec<Expression>),
+    Function(Variable, Vec<Expression>),
     Variable(Variable),
 }
 
@@ -62,19 +72,26 @@ impl Expression {
         }
     }
 
-    pub fn evaluate(&self, vars: &impl Table<String, Value>) -> EResult<Value> {
+    pub fn evaluate(
+        &self,
+        vars: &impl Table<Variable, Value>,
+        funcs: &impl Table<Variable, Function>,
+    ) -> EResult<Value> {
         Ok(match self {
             Expression::Value(v) => *v,
             Expression::Point(p) => {
                 let (x, y) = p.as_ref();
-                Value::point(x.evaluate(vars)?, y.evaluate(vars)?)?
+                Value::point(x.evaluate(vars, funcs)?, y.evaluate(vars, funcs)?)?
             }
             Expression::BinaryOperator(op, args) => {
                 let (lhs, rhs) = args.as_ref();
-                op.apply(lhs.evaluate(vars)?, rhs.evaluate(vars)?)?
+                op.apply(lhs.evaluate(vars, funcs)?, rhs.evaluate(vars, funcs)?)?
             }
-            Expression::UnaryOperator(op, arg) => op.apply(arg.evaluate(vars)?)?,
-            Expression::Function(func, args) => func.apply(args, vars)?,
+            Expression::UnaryOperator(op, arg) => op.apply(arg.evaluate(vars, funcs)?)?,
+            Expression::Function(func_name, args) => match funcs.get(&func_name) {
+                None => Err(MathError::Function(func_name.clone()))?,
+                Some(func) => func.apply(args, vars, funcs)?,
+            },
             Expression::Variable(var) => match vars.get(&var) {
                 None => Err(MathError::Variable(var.clone()))?,
                 Some(val) => *val,

@@ -62,6 +62,10 @@ pub enum MathError {
     DivisionByZero,
     #[fail(display = "Undefined variable {:?}", _0)]
     Variable(Variable),
+    #[fail(display = "Undefined function {:?}", _0)]
+    Function(Variable),
+    #[fail(display = "Incorrect number of arguments to function (expected {}, got {})", _0, _1)]
+    Arguments(usize, usize),
 }
 
 #[derive(Debug)]
