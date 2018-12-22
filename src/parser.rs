@@ -31,7 +31,7 @@ pub struct Parser<T, V> {
 impl<T, V> Parser<T, V>
 where
     T: ParserExt,
-    V: TableMut<String, Value>,
+    V: Table<String, Value>,
 {
     fn next(&mut self) -> Option<EResult<Token>> {
         self.tokens.next()
@@ -43,43 +43,6 @@ where
 
     fn line(&self) -> usize {
         self.tokens.line()
-    }
-
-    /// Parse and evaluate a statement.
-    ///
-    /// The `Ok` value indicates whether there are more statements remaining (i.e. whether this
-    /// statement ended with a `;`).
-    fn parse_statement(&mut self) -> EResult<bool> {
-        match try_opt!(self.next()) {
-            // tag; start of an assignment expression or function definition
-            Some(Token::Tag(tag)) => {
-                match try_opt!(self.next()) {
-                    // assignment
-                    Some(Token::Equal) => {
-                        let value = self.parse_value()?;
-                        self.variables.insert(tag, value);
-                    }
-                    // function definition
-                    Some(Token::LeftParen) => unimplemented!(),
-                    // other token; unexpected
-                    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                    // unexpected end of input
-                    None => Err(ParserError::EndOfInput(self.line()))?,
-                };
-                match try_opt!(self.next()) {
-                    // end of statement
-                    Some(Token::Semicolon) => Ok(true),
-                    // end of input (also acceptable)
-                    None => Ok(false),
-                    // other token; unexpected
-                    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                }
-            }
-            // other token; unexpected
-            Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-            // empty statement, end of input
-            None => Ok(false),
-        }
     }
 
     pub fn parse_value(&mut self) -> EResult<Value> {
@@ -153,6 +116,49 @@ where
             }
             Some(tok) => Err(ParserError::Token(tok, self.line()))?,
             None => Err(ParserError::Parentheses(start_line))?,
+        }
+    }
+}
+
+impl<T, V> Parser<T, V>
+where
+    T: ParserExt,
+    V: TableMut<String, Value>,
+{
+    /// Parse and evaluate a statement.
+    ///
+    /// The `Ok` value indicates whether there are more statements remaining (i.e. whether this
+    /// statement ended with a `;`).
+    fn parse_statement(&mut self) -> EResult<bool> {
+        match try_opt!(self.next()) {
+            // tag; start of an assignment expression or function definition
+            Some(Token::Tag(tag)) => {
+                match try_opt!(self.next()) {
+                    // assignment
+                    Some(Token::Equal) => {
+                        let value = self.parse_value()?;
+                        self.variables.insert(tag, value);
+                    }
+                    // function definition
+                    Some(Token::LeftParen) => unimplemented!(),
+                    // other token; unexpected
+                    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                    // unexpected end of input
+                    None => Err(ParserError::EndOfInput(self.line()))?,
+                };
+                match try_opt!(self.next()) {
+                    // end of statement
+                    Some(Token::Semicolon) => Ok(true),
+                    // end of input (also acceptable)
+                    None => Ok(false),
+                    // other token; unexpected
+                    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                }
+            }
+            // other token; unexpected
+            Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+            // empty statement, end of input
+            None => Ok(false),
         }
     }
 }
