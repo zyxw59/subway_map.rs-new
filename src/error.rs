@@ -37,6 +37,11 @@ pub enum ParserError {
     Token(Token, usize),
     #[fail(display = "Unclosed parentheses starting on line {}", _0)]
     Parentheses(usize),
+    #[fail(
+        display = "Too many items in parenthesized list starting on line {} (got {}, expected 1 or 2)",
+        _1, _0
+    )]
+    ParenList(usize, usize),
     #[fail(display = "A math error ({}) occured on line {}", _0, _1)]
     Math(#[cause] MathError, usize),
 }

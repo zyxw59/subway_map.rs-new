@@ -102,21 +102,37 @@ where
 
     fn parse_parentheses(&mut self) -> EResult<Expression> {
         let start_line = self.line();
-        let x = self.parse_expression()?;
-        match try_opt!(self.next()) {
-            Some(Token::RightParen) => Ok(x),
-            Some(Token::Comma) => {
-                let y = self.parse_expression()?;
-                match try_opt!(self.next()) {
-                    Some(Token::RightParen) => Expression::point(x, y)
-                        .map_err(|err| ParserError::Math(err, self.line()).into()),
-                    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                    None => Err(ParserError::Parentheses(start_line))?,
-                }
+        let mut list = self.parse_comma_list()?;
+        let exp = match list.len() {
+            1 => list.pop().unwrap(),
+            2 => {
+                let y = list.pop().unwrap();
+                let x = list.pop().unwrap();
+                Expression::point(x, y).map_err(|err| ParserError::Math(err, self.line()))?
             }
+            n => Err(ParserError::ParenList(n, start_line))?,
+        };
+        match try_opt!(self.next()) {
+            Some(Token::RightParen) => Ok(exp),
             Some(tok) => Err(ParserError::Token(tok, self.line()))?,
             None => Err(ParserError::Parentheses(start_line))?,
         }
+    }
+
+    fn parse_comma_list(&mut self) -> EResult<Vec<Expression>> {
+        let mut list = Vec::new();
+        while let Some(tok) = try_opt!(self.next()) {
+            match tok {
+                Token::Comma => {}
+                Token::RightParen => {
+                    self.put_back(tok);
+                    break;
+                }
+                _ => self.put_back(tok),
+            }
+            list.push(self.parse_expression()?);
+        }
+        Ok(list)
     }
 }
 
