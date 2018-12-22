@@ -60,6 +60,8 @@ pub enum MathError {
     Type(Type, Type),
     #[fail(display = "Division by zero")]
     DivisionByZero,
+    #[fail(display = "Domain error")]
+    Domain,
     #[fail(display = "Undefined variable {:?}", _0)]
     Variable(Variable),
     #[fail(display = "Undefined function {:?}", _0)]

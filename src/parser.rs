@@ -310,6 +310,24 @@ mod tests {
     }
 
     #[test]
+    fn hypot() {
+        let result = Lexer::new("3++4".as_bytes())
+            .into_parser()
+            .parse_value()
+            .unwrap();
+        assert_eq!(result, Value::Number(5.0));
+    }
+
+    #[test]
+    fn hypot_sub() {
+        let result = Lexer::new("5+-+3".as_bytes())
+            .into_parser()
+            .parse_value()
+            .unwrap();
+        assert_eq!(result, Value::Number(4.0));
+    }
+
+    #[test]
     fn parentheses() {
         let result = Lexer::new("(1+2)*3+4".as_bytes())
             .into_parser()

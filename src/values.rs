@@ -20,6 +20,41 @@ impl Value {
             (x, _) => Err(MathError::Type(Type::Number, x.into())),
         }
     }
+
+    pub fn hypot(self, other: Value) -> Result {
+        use self::Value::*;
+        match (self, other) {
+            (Number(x), Number(y)) => Ok(Number(x.hypot(y))),
+            (Number(_), y) => Err(MathError::Type(Type::Number, y.into())),
+            (x, _) => Err(MathError::Type(Type::Number, x.into())),
+        }
+    }
+
+    pub fn hypot_sub(self, other: Value) -> Result {
+        use self::Value::*;
+        match (self, other) {
+            (Number(x), Number(y)) => {
+                // adopted from the algorithm for `hypot` given on [wikipedia][0]
+                //
+                // [0]: https://en.wikipedia.org/wiki/Hypot#Pseudocode
+                let x = x.abs();
+                let y = y.abs();
+                if y > x {
+                    Err(MathError::Domain)
+                } else {
+                    // x == 0.0 implies y == 0.0, since y > x
+                    if y == 0.0 {
+                        Ok(Number(x))
+                    } else {
+                        let t = y / x;
+                        Ok(Number(x * (1.0 - t * t).sqrt()))
+                    }
+                }
+            }
+            (Number(_), y) => Err(MathError::Type(Type::Number, y.into())),
+            (x, _) => Err(MathError::Type(Type::Number, x.into())),
+        }
+    }
 }
 
 impl ops::Add for Value {

@@ -5,35 +5,48 @@ use crate::values::Value;
 
 type EResult<T> = Result<T, MathError>;
 
+enum Precedence {
+    /// Comparison operators, such as `==`, `>`, `<>`, etc.
+    Comparison,
+    /// Additive operators, such as `+`, `-`, `++`, etc.
+    Additive,
+    /// Multiplicative operators, such as `*`, `/`, `&`, etc., as well as unary minus.
+    Multiplicative,
+}
+
 mod builtins {
     use std::ops;
 
-    use super::{BinaryOperator, UnaryOperator};
+    use crate::values::Value;
+
+    use super::{BinaryOperator, Precedence, UnaryOperator};
 
     macro_rules! bin_op {
-        ($name:ident ( $prec:expr, $fun:path )) => {
+        ($name:ident ( $prec:ident, $fun:path )) => {
             pub const $name: BinaryOperator<'static> = BinaryOperator {
-                precedence: $prec,
+                precedence: Precedence::$prec as usize,
                 function: &$fun,
             };
         };
     }
 
-    bin_op! {ADD(1, ops::Add::add)}
-    bin_op! {SUB(1, ops::Sub::sub)}
-    bin_op! {MUL(2, ops::Mul::mul)}
-    bin_op! {DIV(2, ops::Div::div)}
+    bin_op! {ADD(Additive, ops::Add::add)}
+    bin_op! {SUB(Additive, ops::Sub::sub)}
+    bin_op! {HYPOT(Additive, Value::hypot)}
+    bin_op! {HYPOT_SUB(Additive, Value::hypot_sub)}
+    bin_op! {MUL(Multiplicative, ops::Mul::mul)}
+    bin_op! {DIV(Multiplicative, ops::Div::div)}
 
     macro_rules! unary_op {
-        ($name:ident ( $prec:expr, $fun:path )) => {
+        ($name:ident ( $prec:ident, $fun:path )) => {
             pub const $name: UnaryOperator<'static> = UnaryOperator {
-                precedence: $prec,
+                precedence: Precedence::$prec as usize,
                 function: &$fun,
             };
         };
     }
 
-    unary_op! {NEG(2, ops::Neg::neg)}
+    unary_op! {NEG(Multiplicative, ops::Neg::neg)}
 }
 
 pub struct BinaryBuiltins;
@@ -46,6 +59,8 @@ where
         match key.as_ref() {
             "+" => Some(&builtins::ADD),
             "-" => Some(&builtins::SUB),
+            "++" => Some(&builtins::HYPOT),
+            "+-+" => Some(&builtins::HYPOT_SUB),
             "*" => Some(&builtins::MUL),
             "/" => Some(&builtins::DIV),
             _ => None,
