@@ -5,6 +5,16 @@ use crate::error::{MathError, Type};
 
 pub type Result = result::Result<Value, MathError>;
 
+macro_rules! numeric_fn {
+    (($x:ident, $y:ident) => $val:expr) => {
+        match ($x, $y) {
+            (Value::Number($x), Value::Number($y)) => $val,
+            (Value::Number(_), y) => Err(MathError::Type(Type::Number, y.into())),
+            (x, _) => Err(MathError::Type(Type::Number, x.into())),
+        }
+    };
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Value {
     Number(f64),
@@ -14,46 +24,36 @@ pub enum Value {
 impl Value {
     pub fn point(x: Value, y: Value) -> Result {
         use self::Value::*;
-        match (x, y) {
-            (Number(x), Number(y)) => Ok(Point(x, y)),
-            (Number(_), y) => Err(MathError::Type(Type::Number, y.into())),
-            (x, _) => Err(MathError::Type(Type::Number, x.into())),
-        }
+        numeric_fn!((x, y) => Ok(Point(x, y)))
     }
 
     pub fn hypot(self, other: Value) -> Result {
+        let (x, y) = (self, other);
         use self::Value::*;
-        match (self, other) {
-            (Number(x), Number(y)) => Ok(Number(x.hypot(y))),
-            (Number(_), y) => Err(MathError::Type(Type::Number, y.into())),
-            (x, _) => Err(MathError::Type(Type::Number, x.into())),
-        }
+        numeric_fn!((x, y) => Ok(Number(x.hypot(y))))
     }
 
     pub fn hypot_sub(self, other: Value) -> Result {
+        let (x, y) = (self, other);
         use self::Value::*;
-        match (self, other) {
-            (Number(x), Number(y)) => {
-                // adopted from the algorithm for `hypot` given on [wikipedia][0]
-                //
-                // [0]: https://en.wikipedia.org/wiki/Hypot#Pseudocode
-                let x = x.abs();
-                let y = y.abs();
-                if y > x {
-                    Err(MathError::Domain)
+        numeric_fn!((x, y) => {
+            // adopted from the algorithm for `hypot` given on [wikipedia][0]
+            //
+            // [0]: https://en.wikipedia.org/wiki/Hypot#Pseudocode
+            let x = x.abs();
+            let y = y.abs();
+            if y > x {
+                Err(MathError::Domain)
+            } else {
+                // x == 0.0 implies y == 0.0, since y > x
+                if y == 0.0 {
+                    Ok(Number(x))
                 } else {
-                    // x == 0.0 implies y == 0.0, since y > x
-                    if y == 0.0 {
-                        Ok(Number(x))
-                    } else {
-                        let t = y / x;
-                        Ok(Number(x * (1.0 - t * t).sqrt()))
-                    }
+                    let t = y / x;
+                    Ok(Number(x * (1.0 - t * t).sqrt()))
                 }
             }
-            (Number(_), y) => Err(MathError::Type(Type::Number, y.into())),
-            (x, _) => Err(MathError::Type(Type::Number, x.into())),
-        }
+        })
     }
 }
 
