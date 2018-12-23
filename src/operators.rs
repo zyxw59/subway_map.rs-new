@@ -52,6 +52,8 @@ mod builtins {
     unary_op! {NEG(Multiplicative, ops::Neg::neg)}
     unary_op! {COS(Exponential, Value::cos)}
     unary_op! {SIN(Exponential, Value::sin)}
+    unary_op! {DIR(Exponential, Value::dir)}
+    unary_op! {ANGLE(Exponential, Value::angle)}
 }
 
 pub struct BinaryBuiltins;
@@ -85,6 +87,8 @@ where
             "-" => Some(&builtins::NEG),
             "cos" => Some(&builtins::COS),
             "sin" => Some(&builtins::SIN),
+            "dir" => Some(&builtins::DIR),
+            "angle" => Some(&builtins::ANGLE),
             _ => None,
         }
     }

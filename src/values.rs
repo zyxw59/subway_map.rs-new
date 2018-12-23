@@ -34,6 +34,13 @@ pub enum Value {
 }
 
 impl Value {
+    fn as_number(self) -> Option<f64> {
+        match self {
+            Value::Number(x) => Some(x),
+            _ => None,
+        }
+    }
+
     pub fn point(x: Value, y: Value) -> Result {
         use self::Value::*;
         numeric_fn!((x, y) => Ok(Point(x, y)))
@@ -72,25 +79,26 @@ impl Value {
 
     /// Cosine of the number in degrees
     pub fn cos(self) -> Result {
-        numeric_fn!((self) as x => Ok(Value::Number({
-            // since cos is even, we can take |x|, which guarantees that |x| % 360 is nonnegative
-            let x = x.abs() % 360.0;
-            if x == 0.0 { 1.0 }
-            else if x == 180.0 { -1.0 }
-            else if x == 90.0 || x == 270.0 { 0.0 }
-            else { x.to_radians().cos() }
-        })))
+        numeric_fn!((self) as x => Ok(Value::Number(cos_deg(x))))
     }
 
-    /// Sin of the number in degrees
+    /// Sine of the number in degrees
     pub fn sin(self) -> Result {
-        numeric_fn!((self) as x => Ok(Value::Number({
-            let x = x % 360.0;
-            if x == 0.0 || x == 180.0 || x == -180.0 { 0.0 }
-            else if x == 90.0 || x == -270.0 { 1.0 }
-            else if x == -90.0 || x == 270.0 { -1.0 }
-            else { x.to_radians().sin() }
-        })))
+        numeric_fn!((self) as x => Ok(Value::Number(sin_deg(x))))
+    }
+
+    /// Unit vector in the given direction in degrees
+    pub fn dir(self) -> Result {
+        numeric_fn!((self) as x => Ok(Value::Point(cos_deg(x), sin_deg(x))))
+    }
+
+    /// Angle of given vector in degrees
+    pub fn angle(self) -> Result {
+        use self::Value::*;
+        match self {
+            Point(x, y) => Ok(Number(y.atan2(x).to_degrees())),
+            x => Err(MathError::Type(Type::Point, x.into())),
+        }
     }
 }
 
@@ -157,5 +165,32 @@ impl ops::Neg for Value {
             Number(x) => Number(-x),
             Point(x, y) => Point(-x, -y),
         })
+    }
+}
+
+fn cos_deg(x: f64) -> f64 {
+    // since cos is even, we can take |x|, which guarantees that |x| % 360 is nonnegative
+    let x = x.abs() % 360.0;
+    if x == 0.0 {
+        1.0
+    } else if x == 180.0 {
+        -1.0
+    } else if x == 90.0 || x == 270.0 {
+        0.0
+    } else {
+        x.to_radians().cos()
+    }
+}
+
+fn sin_deg(x: f64) -> f64 {
+    let x = x % 360.0;
+    if x == 0.0 || x == 180.0 || x == -180.0 {
+        0.0
+    } else if x == 90.0 || x == -270.0 {
+        1.0
+    } else if x == -90.0 || x == 270.0 {
+        -1.0
+    } else {
+        x.to_radians().sin()
     }
 }

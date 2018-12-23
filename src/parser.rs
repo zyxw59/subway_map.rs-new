@@ -373,6 +373,15 @@ mod tests {
     }
 
     #[test]
+    fn angle() {
+        let result = Lexer::new("angle (3, 3)".as_bytes())
+            .into_parser()
+            .parse_value()
+            .unwrap();
+        assert_eq!(result, Value::Number(45.0));
+    }
+
+    #[test]
     fn unary_minus() {
         let result = Lexer::new("3* -2".as_bytes())
             .into_parser()
