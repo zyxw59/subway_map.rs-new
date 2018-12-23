@@ -7,14 +7,20 @@ pub type Result = result::Result<Value, MathError>;
 
 macro_rules! numeric_fn {
     (($x:ident, $y:ident) => $val:expr) => {
-        match ($x, $y) {
+        numeric_fn!(($x, $y) as ($x, $y) => $val)
+    };
+    ($x:ident => $val:expr) => {
+        numeric_fn!(($x) as $x => $val)
+    };
+    (($ex:expr, $ey:expr) as ($x:ident, $y:ident) => $val:expr) => {
+        match ($ex, $ey) {
             (Value::Number($x), Value::Number($y)) => $val,
             (Value::Number(_), y) => Err(MathError::Type(Type::Number, y.into())),
             (x, _) => Err(MathError::Type(Type::Number, x.into())),
         }
     };
-    ($x:ident => $val:expr) => {
-        match $x {
+    (($ex:expr) as $x:ident => $val:expr) => {
+        match $ex {
             Value::Number($x) => $val,
             x => Err(MathError::Type(Type::Number, x.into())),
         }
@@ -34,15 +40,13 @@ impl Value {
     }
 
     pub fn hypot(self, other: Value) -> Result {
-        let (x, y) = (self, other);
         use self::Value::*;
-        numeric_fn!((x, y) => Ok(Number(x.hypot(y))))
+        numeric_fn!((self, other) as (x, y) => Ok(Number(x.hypot(y))))
     }
 
     pub fn hypot_sub(self, other: Value) -> Result {
-        let (x, y) = (self, other);
         use self::Value::*;
-        numeric_fn!((x, y) => {
+        numeric_fn!((self, other) as (x, y) => {
             // adopted from the algorithm for `hypot` given on [wikipedia][0]
             //
             // [0]: https://en.wikipedia.org/wiki/Hypot#Pseudocode
@@ -63,14 +67,12 @@ impl Value {
     }
 
     pub fn pow(self, other: Value) -> Result {
-        let (x, y) = (self, other);
-        numeric_fn!((x, y) => Ok(Value::Number(x.powf(other))))
+        numeric_fn!((self, other) as (x, y) => Ok(Value::Number(x.powf(y))))
     }
 
     /// Cosine of the number in degrees
     pub fn cos(self) -> Result {
-        let x = self;
-        numeric_fn!(x => Ok(Value::Number({
+        numeric_fn!((self) as x => Ok(Value::Number({
             // since cos is even, we can take |x|, which guarantees that |x| % 360 is nonnegative
             let x = x.abs() % 360.0;
             if x == 0.0 { 1.0 }
@@ -82,8 +84,7 @@ impl Value {
 
     /// Sin of the number in degrees
     pub fn sin(self) -> Result {
-        let x = self;
-        numeric_fn!(x => Ok(Value::Number({
+        numeric_fn!((self) as x => Ok(Value::Number({
             let x = x % 360.0;
             if x == 0.0 || x == 180.0 || x == -180.0 { 0.0 }
             else if x == 90.0 || x == -270.0 { 1.0 }
