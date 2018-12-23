@@ -328,6 +328,15 @@ mod tests {
     }
 
     #[test]
+    fn pow() {
+        let result = Lexer::new("3^4".as_bytes())
+            .into_parser()
+            .parse_value()
+            .unwrap();
+        assert_eq!(result, Value::Number(81.0));
+    }
+
+    #[test]
     fn parentheses() {
         let result = Lexer::new("(1+2)*3+4".as_bytes())
             .into_parser()
@@ -388,6 +397,24 @@ mod tests {
             .parse_value()
             .unwrap();
         assert_eq!(result, Value::Number(-11.0));
+    }
+
+    #[test]
+    fn unary_cos() {
+        let result = Lexer::new("cos 90".as_bytes())
+            .into_parser()
+            .parse_value()
+            .unwrap();
+        assert_eq!(result, Value::Number(0.0));
+    }
+
+    #[test]
+    fn unary_sin() {
+        let result = Lexer::new("sin 90".as_bytes())
+            .into_parser()
+            .parse_value()
+            .unwrap();
+        assert_eq!(result, Value::Number(1.0));
     }
 
     #[test]

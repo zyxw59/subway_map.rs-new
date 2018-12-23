@@ -13,6 +13,12 @@ macro_rules! numeric_fn {
             (x, _) => Err(MathError::Type(Type::Number, x.into())),
         }
     };
+    ($x:ident => $val:expr) => {
+        match $x {
+            Value::Number($x) => $val,
+            x => Err(MathError::Type(Type::Number, x.into())),
+        }
+    };
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -54,6 +60,36 @@ impl Value {
                 }
             }
         })
+    }
+
+    pub fn pow(self, other: Value) -> Result {
+        let (x, y) = (self, other);
+        numeric_fn!((x, y) => Ok(Value::Number(x.powf(other))))
+    }
+
+    /// Cosine of the number in degrees
+    pub fn cos(self) -> Result {
+        let x = self;
+        numeric_fn!(x => Ok(Value::Number({
+            // since cos is even, we can take |x|, which guarantees that |x| % 360 is nonnegative
+            let x = x.abs() % 360.0;
+            if x == 0.0 { 1.0 }
+            else if x == 180.0 { -1.0 }
+            else if x == 90.0 || x == 270.0 { 0.0 }
+            else { x.to_radians().cos() }
+        })))
+    }
+
+    /// Sin of the number in degrees
+    pub fn sin(self) -> Result {
+        let x = self;
+        numeric_fn!(x => Ok(Value::Number({
+            let x = x % 360.0;
+            if x == 0.0 || x == 180.0 || x == -180.0 { 0.0 }
+            else if x == 90.0 || x == -270.0 { 1.0 }
+            else if x == -90.0 || x == 270.0 { -1.0 }
+            else { x.to_radians().sin() }
+        })))
     }
 }
 

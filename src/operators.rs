@@ -12,6 +12,8 @@ enum Precedence {
     Additive,
     /// Multiplicative operators, such as `*`, `/`, `&`, etc., as well as unary minus.
     Multiplicative,
+    /// Exponential operators, such as `^`, as well as unary sine and cosine.
+    Exponential,
 }
 
 mod builtins {
@@ -36,6 +38,7 @@ mod builtins {
     bin_op! {HYPOT_SUB(Additive, Value::hypot_sub)}
     bin_op! {MUL(Multiplicative, ops::Mul::mul)}
     bin_op! {DIV(Multiplicative, ops::Div::div)}
+    bin_op! {POW(Exponential, Value::pow)}
 
     macro_rules! unary_op {
         ($name:ident ( $prec:ident, $fun:path )) => {
@@ -47,6 +50,8 @@ mod builtins {
     }
 
     unary_op! {NEG(Multiplicative, ops::Neg::neg)}
+    unary_op! {COS(Exponential, Value::cos)}
+    unary_op! {SIN(Exponential, Value::sin)}
 }
 
 pub struct BinaryBuiltins;
@@ -63,6 +68,7 @@ where
             "+-+" => Some(&builtins::HYPOT_SUB),
             "*" => Some(&builtins::MUL),
             "/" => Some(&builtins::DIV),
+            "^" => Some(&builtins::POW),
             _ => None,
         }
     }
@@ -77,6 +83,8 @@ where
     fn get(&self, key: &K) -> Option<&'static UnaryOperator<'static>> {
         match key.as_ref() {
             "-" => Some(&builtins::NEG),
+            "cos" => Some(&builtins::COS),
+            "sin" => Some(&builtins::SIN),
             _ => None,
         }
     }
