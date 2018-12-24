@@ -34,41 +34,22 @@ pub enum Value {
 }
 
 impl Value {
-    fn as_number(self) -> Option<f64> {
-        match self {
-            Value::Number(x) => Some(x),
-            _ => None,
-        }
-    }
-
     pub fn point(x: Value, y: Value) -> Result {
-        use self::Value::*;
-        numeric_fn!((x, y) => Ok(Point(x, y)))
+        numeric_fn!((x, y) => Ok(Value::Point(x, y)))
     }
 
     pub fn hypot(self, other: Value) -> Result {
-        use self::Value::*;
-        numeric_fn!((self, other) as (x, y) => Ok(Number(x.hypot(y))))
+        numeric_fn!((self, other) as (x, y) => Ok(Value::Number(x.hypot(y))))
     }
 
     pub fn hypot_sub(self, other: Value) -> Result {
-        use self::Value::*;
         numeric_fn!((self, other) as (x, y) => {
-            // adopted from the algorithm for `hypot` given on [wikipedia][0]
-            //
-            // [0]: https://en.wikipedia.org/wiki/Hypot#Pseudocode
             let x = x.abs();
             let y = y.abs();
             if y > x {
                 Err(MathError::Domain)
             } else {
-                // x == 0.0 implies y == 0.0, since y > x
-                if y == 0.0 {
-                    Ok(Number(x))
-                } else {
-                    let t = y / x;
-                    Ok(Number(x * (1.0 - t * t).sqrt()))
-                }
+                Ok(Value::Number((x*x - y*y).sqrt()))
             }
         })
     }
