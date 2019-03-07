@@ -32,6 +32,12 @@ mod builtins {
         };
     }
 
+    bin_op! {EQ(Comparison, Value::eq)}
+    bin_op! {NE(Comparison, Value::ne)}
+    bin_op! {LT(Comparison, Value::lt)}
+    bin_op! {LE(Comparison, Value::le)}
+    bin_op! {GT(Comparison, Value::gt)}
+    bin_op! {GE(Comparison, Value::ge)}
     bin_op! {ADD(Additive, ops::Add::add)}
     bin_op! {SUB(Additive, ops::Sub::sub)}
     bin_op! {HYPOT(Additive, Value::hypot)}
@@ -64,6 +70,12 @@ where
 {
     fn get(&self, key: &K) -> Option<&'static BinaryOperator<'static>> {
         match key.as_ref() {
+            "==" => Some(&builtins::EQ),
+            "!=" => Some(&builtins::NE),
+            "<" => Some(&builtins::LT),
+            "<=" => Some(&builtins::LE),
+            ">" => Some(&builtins::GT),
+            ">=" => Some(&builtins::GE),
             "+" => Some(&builtins::ADD),
             "-" => Some(&builtins::SUB),
             "++" => Some(&builtins::HYPOT),

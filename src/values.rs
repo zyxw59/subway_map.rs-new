@@ -81,6 +81,60 @@ impl Value {
             x => Err(MathError::Type(Type::Point, x.into())),
         }
     }
+
+    pub fn eq(self, other: Value) -> Result {
+        use self::Value::*;
+        match (self, other) {
+            (Number(x), Number(y)) => Ok(Value::Number((x == y) as u8 as f64)),
+            (Point(x1, y1), Point(x2, y2)) => {
+                Ok(Value::Number((x1 == x2 && y1 == y2) as u8 as f64))
+            }
+            _ => Err(MathError::Type(self.into(), other.into())),
+        }
+    }
+
+    pub fn ne(self, other: Value) -> Result {
+        use self::Value::*;
+        match (self, other) {
+            (Number(x), Number(y)) => Ok(Value::Number((x != y) as u8 as f64)),
+            (Point(x1, y1), Point(x2, y2)) => {
+                Ok(Value::Number((x1 != x2 || y1 != y2) as u8 as f64))
+            }
+            _ => Err(MathError::Type(self.into(), other.into())),
+        }
+    }
+
+    pub fn lt(self, other: Value) -> Result {
+        use self::Value::*;
+        match (self, other) {
+            (Number(x), Number(y)) => Ok(Value::Number((x < y) as u8 as f64)),
+            _ => Err(MathError::Type(Type::Number, self.into())),
+        }
+    }
+
+    pub fn le(self, other: Value) -> Result {
+        use self::Value::*;
+        match (self, other) {
+            (Number(x), Number(y)) => Ok(Value::Number((x <= y) as u8 as f64)),
+            _ => Err(MathError::Type(Type::Number, self.into())),
+        }
+    }
+
+    pub fn gt(self, other: Value) -> Result {
+        use self::Value::*;
+        match (self, other) {
+            (Number(x), Number(y)) => Ok(Value::Number((x > y) as u8 as f64)),
+            _ => Err(MathError::Type(Type::Number, self.into())),
+        }
+    }
+
+    pub fn ge(self, other: Value) -> Result {
+        use self::Value::*;
+        match (self, other) {
+            (Number(x), Number(y)) => Ok(Value::Number((x >= y) as u8 as f64)),
+            _ => Err(MathError::Type(Type::Number, self.into())),
+        }
+    }
 }
 
 impl ops::Add for Value {
