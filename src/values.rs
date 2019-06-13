@@ -68,9 +68,10 @@ impl Value {
         numeric_fn!((self) as x => Ok(Value::Number(sin_deg(x))))
     }
 
-    /// Unit vector in the given direction in degrees
+    /// Unit vector in the given direction in degrees, with 0 being up the page, and increasing
+    /// clockwise.
     pub fn dir(self) -> Result {
-        numeric_fn!((self) as x => Ok(Value::Point(cos_deg(x), sin_deg(x))))
+        numeric_fn!((self) as x => Ok(Value::Point(sin_deg(x), -cos_deg(x))))
     }
 
     /// Angle of given vector in degrees
