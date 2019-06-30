@@ -45,6 +45,13 @@ macro_rules! expect {
             None => Err(ParserError::EndOfInput($self.line()))?,
         }
     };
+    ($self:ident, $token:pat, $capture:expr) => {
+        match try_opt!($self.next()) {
+            Some($token) => $capture,
+            Some(tok) => Err(ParserError::Token(tok, $self.line()))?,
+            None => Err(ParserError::EndOfInput($self.line()))?,
+        }
+    };
 }
 
 pub struct Parser<T, V, F> {
@@ -189,8 +196,12 @@ where
         Ok(list)
     }
 
-    /// Parses a function definition, after the initial open paren has been matched.
-    fn parse_function_def(&mut self) -> EResult<Function> {
+    /// Parses a function definition.
+    ///
+    /// On success, returns a tuple of the function name and the function definition.
+    fn parse_function_def(&mut self) -> EResult<(String, Function)> {
+        let tag = expect!(self, Token::Tag(tag), tag);
+        expect!(self, Token::LeftParen);
         // maps argument names to their index in the function signature
         let mut args = HashMap::new();
         let mut index = 0;
@@ -203,9 +214,12 @@ where
                     match args.entry(arg) {
                         // there's already an argument with this name
                         Entry::Occupied(e) => {
-                            return Err(
-                                ParserError::Argument(e.remove_entry().0, self.line()).into()
-                            );
+                            return Err(ParserError::Argument(
+                                e.remove_entry().0,
+                                tag,
+                                self.line(),
+                            )
+                            .into());
                         }
                         Entry::Vacant(e) => e.insert(index),
                     };
@@ -226,7 +240,7 @@ where
         expect!(self, Token::Equal);
         // get the function body, as an expression tree
         let expression = self.function_def_parser().parse_expression()?;
-        Ok(Function { args, expression })
+        Ok((tag, Function { args, expression }))
     }
 }
 
@@ -244,22 +258,51 @@ where
         match try_opt!(self.next()) {
             // tag; start of an assignment expression or function definition
             Some(Token::Tag(tag)) => {
-                match try_opt!(self.next()) {
-                    // assignment
-                    Some(Token::Equal) => {
+                match tag.as_ref() {
+                    // function definition
+                    "fn" => {
+                        let (func_name, func) = self.parse_function_def()?;
+                        self.functions.insert(func_name, func);
+                    }
+                    // single point
+                    "point" => {
+                        unimplemented!();
+                    }
+                    // sequence of points
+                    "points" => {
+                        unimplemented!();
+                    }
+                    // line
+                    "line" => {
+                        unimplemented!();
+                    }
+                    // stop
+                    "stop" => {
+                        unimplemented!();
+                    }
+                    // other (variable assignment)
+                    _ => {
+                        expect!(self, Token::Equal);
                         let value = self.parse_value()?;
                         self.variables.insert(tag, value);
                     }
-                    // function definition
-                    Some(Token::LeftParen) => {
-                        let func = self.parse_function_def()?;
-                        self.functions.insert(tag, func);
-                    }
-                    // other token; unexpected
-                    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                    // unexpected end of input
-                    None => Err(ParserError::EndOfInput(self.line()))?,
-                };
+                }
+                //match try_opt!(self.next()) {
+                //    // assignment
+                //    Some(Token::Equal) => {
+                //        let value = self.parse_value()?;
+                //        self.variables.insert(tag, value);
+                //    }
+                //    // function definition
+                //    Some(Token::LeftParen) => {
+                //        let (tag, func) = self.parse_function_def()?;
+                //        self.functions.insert(tag, func);
+                //    }
+                //    // other token; unexpected
+                //    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                //    // unexpected end of input
+                //    None => Err(ParserError::EndOfInput(self.line()))?,
+                //};
                 match try_opt!(self.next()) {
                     // end of statement
                     Some(Token::Semicolon) => Ok(true),
@@ -445,14 +488,14 @@ mod tests {
 
     #[test]
     fn functions() {
-        let mut parser = Lexer::new("f(x) = x + 1; y = f(3)".as_bytes()).into_parser();
+        let mut parser = Lexer::new("fn f(x) = x + 1; y = f(3)".as_bytes()).into_parser();
         while parser.parse_statement().unwrap() {}
         assert_eq!(parser.variables.get("y"), Some(&Value::Number(4.0)));
     }
 
     #[test]
     fn functions_2() {
-        let mut parser = Lexer::new("f(x, y) = x * y; z = f(3, 2)".as_bytes()).into_parser();
+        let mut parser = Lexer::new("fn f(x, y) = x * y; z = f(3, 2)".as_bytes()).into_parser();
         while parser.parse_statement().unwrap() {}
         assert_eq!(parser.variables.get("z"), Some(&Value::Number(6.0)));
     }
