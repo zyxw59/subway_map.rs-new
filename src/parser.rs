@@ -283,22 +283,6 @@ where
                         self.variables.insert(tag, value);
                     }
                 }
-                //match try_opt!(self.next()) {
-                //    // assignment
-                //    Some(Token::Equal) => {
-                //        let value = self.parse_value()?;
-                //        self.variables.insert(tag, value);
-                //    }
-                //    // function definition
-                //    Some(Token::LeftParen) => {
-                //        let (tag, func) = self.parse_function_def()?;
-                //        self.functions.insert(tag, func);
-                //    }
-                //    // other token; unexpected
-                //    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                //    // unexpected end of input
-                //    None => Err(ParserError::EndOfInput(self.line()))?,
-                //};
                 match try_opt!(self.next()) {
                     // end of statement
                     Some(Token::Semicolon) => Ok(true),
