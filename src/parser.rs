@@ -188,6 +188,46 @@ where
         }
         Ok(list)
     }
+
+    /// Parses a function definition, after the initial open paren has been matched.
+    fn parse_function_def(&mut self) -> EResult<Function> {
+        // maps argument names to their index in the function signature
+        let mut args = HashMap::new();
+        let mut index = 0;
+        let start_line = self.line();
+        loop {
+            match try_opt!(self.next()) {
+                // a named argument
+                Some(Token::Tag(arg)) => {
+                    // insert the new argument into the hashmap
+                    match args.entry(arg) {
+                        // there's already an argument with this name
+                        Entry::Occupied(e) => {
+                            return Err(
+                                ParserError::Argument(e.remove_entry().0, self.line()).into()
+                            );
+                        }
+                        Entry::Vacant(e) => e.insert(index),
+                    };
+                    index += 1;
+                    match try_opt!(self.next()) {
+                        Some(Token::Comma) => {}
+                        Some(Token::RightParen) => break,
+                        Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                        None => Err(ParserError::Parentheses(start_line))?,
+                    }
+                }
+                // end of the arguments
+                Some(Token::RightParen) => break,
+                Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                None => Err(ParserError::Parentheses(start_line))?,
+            }
+        }
+        expect!(self, Token::Equal);
+        // get the function body, as an expression tree
+        let expression = self.function_def_parser().parse_expression()?;
+        Ok(Function { args, expression })
+    }
 }
 
 impl<T, V, F> Parser<T, V, F>
@@ -212,45 +252,7 @@ where
                     }
                     // function definition
                     Some(Token::LeftParen) => {
-                        // maps argument names to their index in the function signature
-                        let mut args = HashMap::new();
-                        let mut index = 0;
-                        let start_line = self.line();
-                        loop {
-                            match try_opt!(self.next()) {
-                                // a named argument
-                                Some(Token::Tag(arg)) => {
-                                    // insert the new argument into the hashmap
-                                    match args.entry(arg) {
-                                        // there's already an argument with this name
-                                        Entry::Occupied(e) => {
-                                            return Err(ParserError::Argument(
-                                                tag,
-                                                e.remove_entry().0,
-                                                self.line(),
-                                            )
-                                            .into());
-                                        }
-                                        Entry::Vacant(e) => e.insert(index),
-                                    };
-                                    index += 1;
-                                    match try_opt!(self.next()) {
-                                        Some(Token::Comma) => {}
-                                        Some(Token::RightParen) => break,
-                                        Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                                        None => Err(ParserError::Parentheses(start_line))?,
-                                    }
-                                }
-                                // end of the arguments
-                                Some(Token::RightParen) => break,
-                                Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                                None => Err(ParserError::Parentheses(start_line))?,
-                            }
-                        }
-                        expect!(self, Token::Equal);
-                        // get the function body, as an expression tree
-                        let expression = self.function_def_parser().parse_expression()?;
-                        let func = Function { args, expression };
+                        let func = self.parse_function_def()?;
                         self.functions.insert(tag, func);
                     }
                     // other token; unexpected
