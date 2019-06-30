@@ -1,0 +1,119 @@
+# This is a simple example to demonstrate and test the basic syntax.
+# As more features are added, this example will become more complex.
+
+# these variables have special meaning:
+# line_sep determines the separation between the centers of parallel lines
+# to define a style for thinner lines (e.g. for a different mode), use
+# `line_sep.{style}`, where `{style}` is the name of the style.
+# To access a style you've defined in this way, use `line.{style}` when
+# defining a line.
+line_sep = 10;
+# inner_radius determines the radius of the innermost curve in a rounded corner
+inner_radius = 20;
+
+ss = line_sep * 5;
+margin = (ss, ss);
+
+# 60-degree grid
+NE = ss * dir 30;
+E  = ss * dir 90;
+SE = ss * dir 150;
+SW = ss * dir 210;
+W  = ss * dir 270;
+NW = ss * dir 330;
+
+# oakland wye
+point wye = margin + 7.5 * SE;
+
+# antioch line
+points from wye spaced NE: 1/2 st12, st19, mcar, 1/2 c0;
+points from c0  spaced E:  1/2 rock, orin, lafy, 1/2 c35;
+points from c35 spaced NE: 1/2 wcrk, phil, conc, ncon, 1/2 c75;
+points from c75 spaced E:  1/2 pitt, pctr, antc;
+
+# richmond line
+points from c0  spaced NW: 1/2 ashb, dbrk, nbrk, plza, deln, rich;
+
+# fremont line
+points from wye spaced SE:
+    1/2 lake, ftvl, cols, sanl, bayf, 1/2 l0,
+    1/2 hayw, shay, ucty, fmnt, warm;
+
+# oakland airport connector
+point oakl = cols + SW;
+
+# dublin line
+points from l0  spaced E:  1/2 cast, wdub, dubl;
+
+# san francisco line
+points from wye spaced W:  1/2 woak, 3/2 m15;
+points from m15 spaced SW:
+    1/2 embr, mont, powl, civc, st16, st24, glen, balb, daly, 1/2 w0;
+points from w0  spaced SE: 1/2 colm, ssan, sbrn, 1/2 y0, 1/2 mlbr;
+
+# sfo line
+point sfia = y0 + ss * dir 60;
+
+# line offsets are positive to the right, travelling in the direction of the
+# line as written, so `a --[1] b` is the same as `b --[-1] a`
+line "orange":           rich --[ 1] c0 --[ 1] wye --[ 1] warm;
+line "red-limited":                                      daly --[ 1] w0 --[ 1] mlbr;
+line "red":              rich --[ 0] c0 --[ 0] wye --[ 1] m15 --[ 1] daly;
+line "yellow-limited":                                   sfia --[ 0] y0 --[ 0] mlbr;
+line "purple":                                           sfia --[-1] y0 --[-1] mlbr;
+line "yellow": antc -- c75 -- c34 -- c0 --[-1] wye --[ 0] m15 --[ 0] w0 --[ 0] y0 --[ 0] sfia;
+line "blue":                 dubl -- l0 --[ 1] wye --[-1] m15 --[-1] daly;
+line "green":                      warm --[ 0] wye --[-2] m15 --[-2] daly;
+line "oac": cols -- oakl;
+
+#    style   point lines label     position
+stop.terminus antc [all] "Antioch" end;
+stop          pctr [all] "Pittsburg Center" above;
+stop          pitt [all] "Pittsburg/\nBay Point" above;
+stop          conc [all] "North Concord/\nMartinez" above;
+stop          conc [all] "Concord" below;
+stop          phil [all] "Pleasant Hill/\nContra Costa Centre" below;
+stop          wcrk [all] "Walnut Creek" below;
+stop          lafy [all] "Lafayette" below;
+stop          orin [all] "Orinda" below;
+stop          rock [all] "Rockridge" below;
+stop.transfer mcar [all] "MacArthur" right;
+stop.transfer st19 [all] "19th Street/Oakland" right;
+stop          st12 [all] "12th Street/Oakland City Center" right;
+stop.terminus rich [all] "Richmond" end;
+stop          deln [all] "El Cerrito Del Norte" right;
+stop          plza [all] "El Cerrito Plaza" right;
+stop          nbrk [all] "North Berkeley" right;
+stop          dbrk [all] "Downtown Berkeley" right;
+stop          ashb [all] "Ashby" right;
+stop          lake [all] "Lake Merrit" right;
+stop          ftvl [all] "Fruitvale" right;
+stop.transfer cols [all] "Coliseum" right;
+stop          sanl [all] "San Leandro" right;
+stop.transfer bayf [all] "Bay Fair" right;
+stop          hayw [all] "Hayward" right;
+stop          shay [all] "South Hayward" right;
+stop          ucty [all] "Union City" right;
+stop          fmnt [all] "Fremont" right;
+stop.terminus warm [all] "Warm Springs/South Fremont" end;
+stop.terminus oakl [all] "Oakland\nInternational\nAirport" end;
+stop          cast [all] "Castro Valley" above;
+stop          wdub [all] "West Dublin/\nPleasanton" above;
+stop.terminus dubl [all] "Dublin/Pleasanton" end;
+stop          woak [all] "West Oakland" above;
+stop          embr [all] "Embarcadero" left;
+stop          mont [all] "Montgomery St" left;
+stop          powl [all] "Powell St" left;
+stop          civc [all] "Civic Center/\nUN Plaza" left;
+stop          st16 [all] "16th St Mission" left;
+stop          st24 [all] "24th St Mission" left;
+stop          glen [all] "Glen Park" left;
+stop.transfer balb [all] "Balboa Park" left;
+stop.terminus daly ["blue", "green"] "Daly City" left;
+stop          daly ["red", "yellow"]; # no label, just the extra station markers
+stop          colm [all] "Colma" right;
+stop          ssan [all] "South San Francisco" right;
+stop.transfer sbrn [all] "San Bruno" right;
+stop.terminus mlbr [all] "Millbrae" end;
+stop.terminus sfia [all] "San Francisco\nInternational\nAirport" end;
+
