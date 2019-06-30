@@ -39,11 +39,7 @@ where
 
 macro_rules! expect {
     ($self:ident, $token:pat) => {
-        match try_opt!($self.next()) {
-            Some($token) => {}
-            Some(tok) => Err(ParserError::Token(tok, $self.line()))?,
-            None => Err(ParserError::EndOfInput($self.line()))?,
-        }
+        expect!($self, $token, ())
     };
     ($self:ident, $token:pat, $capture:expr) => {
         match try_opt!($self.next()) {
