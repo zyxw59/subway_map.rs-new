@@ -26,6 +26,13 @@ where
     V: TableMut<Variable, Value>,
     F: TableMut<Variable, Function>,
 {
+    fn evaluate_all(&mut self, parser: impl Iterator<Item = EResult<Statement>>) -> EResult<()> {
+        for statement in parser {
+            self.evaluate(statement?)?;
+        }
+        Ok(())
+    }
+
     fn evaluate(&mut self, Statement { statement, line }: Statement) -> EResult<()> {
         match statement {
             StatementKind::Null => {}
@@ -56,10 +63,9 @@ mod tests {
 
     #[test]
     fn variables_set() {
-        let mut parser = Lexer::new("x = 1".as_bytes()).into_parser();
+        let parser = Lexer::new("x = 1".as_bytes()).into_parser();
         let mut evaluator = Evaluator::new();
-        evaluator.evaluate(parser.next().unwrap().unwrap()).unwrap();
-        assert!(parser.next().is_none());
+        evaluator.evaluate_all(parser).unwrap();
         assert_eq!(evaluator.variables.get("x"), Some(&Value::Number(1.0)));
     }
 
@@ -67,9 +73,7 @@ mod tests {
     fn variables_get() {
         let parser = Lexer::new("x = 1; z = x * 2".as_bytes()).into_parser();
         let mut evaluator = Evaluator::new();
-        for statement in parser {
-            evaluator.evaluate(statement.unwrap()).unwrap();
-        }
+        evaluator.evaluate_all(parser).unwrap();
         assert_eq!(evaluator.variables.get("x"), Some(&Value::Number(1.0)));
         assert_eq!(evaluator.variables.get("z"), Some(&Value::Number(2.0)));
     }
@@ -78,9 +82,7 @@ mod tests {
     fn functions() {
         let parser = Lexer::new("fn f(x) = x + 1; y = f(3)".as_bytes()).into_parser();
         let mut evaluator = Evaluator::new();
-        for statement in parser {
-            evaluator.evaluate(statement.unwrap()).unwrap();
-        }
+        evaluator.evaluate_all(parser).unwrap();
         assert_eq!(evaluator.variables.get("y"), Some(&Value::Number(4.0)));
     }
 
@@ -88,9 +90,7 @@ mod tests {
     fn functions_2() {
         let parser = Lexer::new("fn f(x, y) = x * y; z = f(3, 2)".as_bytes()).into_parser();
         let mut evaluator = Evaluator::new();
-        for statement in parser {
-            evaluator.evaluate(statement.unwrap()).unwrap();
-        }
+        evaluator.evaluate_all(parser).unwrap();
         assert_eq!(evaluator.variables.get("z"), Some(&Value::Number(6.0)));
     }
 }
