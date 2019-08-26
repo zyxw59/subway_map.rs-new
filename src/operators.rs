@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::error::MathError;
 use crate::expressions::Expression;
 use crate::tables::Table;
@@ -24,42 +26,44 @@ mod builtins {
     use super::{BinaryOperator, Precedence, UnaryOperator};
 
     macro_rules! bin_op {
-        ($name:ident ( $prec:ident, $fun:path )) => {
+        ($name:ident ( $prec:ident, $fun:path, $debug:literal )) => {
             pub const $name: BinaryOperator<'static> = BinaryOperator {
                 precedence: Precedence::$prec as usize,
                 function: &$fun,
+                name: $debug,
             };
         };
     }
 
-    bin_op! {EQ(Comparison, Value::eq)}
-    bin_op! {NE(Comparison, Value::ne)}
-    bin_op! {LT(Comparison, Value::lt)}
-    bin_op! {LE(Comparison, Value::le)}
-    bin_op! {GT(Comparison, Value::gt)}
-    bin_op! {GE(Comparison, Value::ge)}
-    bin_op! {ADD(Additive, ops::Add::add)}
-    bin_op! {SUB(Additive, ops::Sub::sub)}
-    bin_op! {HYPOT(Additive, Value::hypot)}
-    bin_op! {HYPOT_SUB(Additive, Value::hypot_sub)}
-    bin_op! {MUL(Multiplicative, ops::Mul::mul)}
-    bin_op! {DIV(Multiplicative, ops::Div::div)}
-    bin_op! {POW(Exponential, Value::pow)}
+    bin_op! {EQ(Comparison, Value::eq, "==")}
+    bin_op! {NE(Comparison, Value::ne, "!=")}
+    bin_op! {LT(Comparison, Value::lt, ">")}
+    bin_op! {LE(Comparison, Value::le, ">=")}
+    bin_op! {GT(Comparison, Value::gt, "<")}
+    bin_op! {GE(Comparison, Value::ge, "<=")}
+    bin_op! {ADD(Additive, ops::Add::add, "+")}
+    bin_op! {SUB(Additive, ops::Sub::sub, "-")}
+    bin_op! {HYPOT(Additive, Value::hypot, "++")}
+    bin_op! {HYPOT_SUB(Additive, Value::hypot_sub, "+-+")}
+    bin_op! {MUL(Multiplicative, ops::Mul::mul, "*")}
+    bin_op! {DIV(Multiplicative, ops::Div::div, "/")}
+    bin_op! {POW(Exponential, Value::pow, "^")}
 
     macro_rules! unary_op {
-        ($name:ident ( $prec:ident, $fun:path )) => {
+        ($name:ident ( $prec:ident, $fun:path, $debug:literal )) => {
             pub const $name: UnaryOperator<'static> = UnaryOperator {
                 precedence: Precedence::$prec as usize,
                 function: &$fun,
+                name: $debug,
             };
         };
     }
 
-    unary_op! {NEG(Multiplicative, ops::Neg::neg)}
-    unary_op! {COS(Exponential, Value::cos)}
-    unary_op! {SIN(Exponential, Value::sin)}
-    unary_op! {DIR(Exponential, Value::dir)}
-    unary_op! {ANGLE(Exponential, Value::angle)}
+    unary_op! {NEG(Multiplicative, ops::Neg::neg, "-")}
+    unary_op! {COS(Exponential, Value::cos, "cos")}
+    unary_op! {SIN(Exponential, Value::sin, "sin")}
+    unary_op! {DIR(Exponential, Value::dir, "dir")}
+    unary_op! {ANGLE(Exponential, Value::angle, "angle")}
 }
 
 pub struct BinaryBuiltins;
@@ -106,9 +110,11 @@ where
     }
 }
 
+#[derive(Clone)]
 pub struct BinaryOperator<'a> {
     pub precedence: usize,
     function: &'a dyn Fn(Value, Value) -> EResult<Value>,
+    name: &'static str,
 }
 
 impl<'a> BinaryOperator<'a> {
@@ -116,19 +122,22 @@ impl<'a> BinaryOperator<'a> {
         (self.function)(lhs, rhs)
     }
 
-    pub fn expression(&'static self, lhs: Expression, rhs: Expression) -> EResult<Expression> {
-        match (lhs, rhs) {
-            (Expression::Value(lhs), Expression::Value(rhs)) => {
-                self.apply(lhs, rhs).map(Expression::Value)
-            }
-            (lhs, rhs) => Ok(Expression::BinaryOperator(self, Box::new((lhs, rhs)))),
-        }
+    pub fn expression(&'static self, lhs: Expression, rhs: Expression) -> Expression {
+        Expression::BinaryOperator(self, Box::new((lhs, rhs)))
     }
 }
 
+impl<'a> fmt::Debug for BinaryOperator<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Clone)]
 pub struct UnaryOperator<'a> {
     pub precedence: usize,
     function: &'a dyn Fn(Value) -> EResult<Value>,
+    name: &'static str,
 }
 
 impl<'a> UnaryOperator<'a> {
@@ -136,10 +145,13 @@ impl<'a> UnaryOperator<'a> {
         (self.function)(argument)
     }
 
-    pub fn expression(&'static self, argument: Expression) -> EResult<Expression> {
-        match argument {
-            Expression::Value(argument) => self.apply(argument).map(Expression::Value),
-            argument => Ok(Expression::UnaryOperator(self, Box::new(argument))),
-        }
+    pub fn expression(&'static self, argument: Expression) -> Expression {
+        Expression::UnaryOperator(self, Box::new(argument))
+    }
+}
+
+impl<'a> fmt::Debug for UnaryOperator<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }

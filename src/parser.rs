@@ -1,32 +1,29 @@
 use std::collections::{hash_map::Entry, HashMap};
 
-use crate::error::{ParserError, Result as EResult};
+use crate::error::{EvaluatorError, ParserError, Result as EResult};
 use crate::expressions::{Expression, Function, Variable};
 use crate::lexer::Token;
 use crate::operators::{BinaryBuiltins, UnaryBuiltins};
-use crate::tables::{Table, TableMut};
+use crate::statement::{Statement, StatementKind};
+use crate::tables::Table;
 use crate::values::Value;
 
-pub trait ParserExt: Iterator<Item = EResult<Token>> {
+pub trait LexerExt: Iterator<Item = EResult<Token>> {
     fn put_back(&mut self, put_back: Token);
 
     fn line(&self) -> usize;
 
-    fn into_parser(self) -> Parser<Self, HashMap<Variable, Value>, HashMap<Variable, Function>>
+    fn into_parser(self) -> Parser<Self>
     where
         Self: Sized,
     {
-        Parser {
-            tokens: self,
-            variables: HashMap::<Variable, Value>::new(),
-            functions: HashMap::<Variable, Function>::new(),
-        }
+        Parser { tokens: self }
     }
 }
 
-impl<'a, T> ParserExt for &'a mut T
+impl<'a, T> LexerExt for &'a mut T
 where
-    T: ParserExt,
+    T: LexerExt,
 {
     fn put_back(&mut self, put_back: Token) {
         (**self).put_back(put_back);
@@ -50,17 +47,13 @@ macro_rules! expect {
     };
 }
 
-pub struct Parser<T, V, F> {
+pub struct Parser<T> {
     tokens: T,
-    variables: V,
-    functions: F,
 }
 
-impl<T, V, F> Parser<T, V, F>
+impl<T> Parser<T>
 where
-    T: ParserExt,
-    V: Table<Variable, Value>,
-    F: Table<Variable, Function>,
+    T: LexerExt,
 {
     fn next(&mut self) -> Option<EResult<Token>> {
         self.tokens.next()
@@ -74,28 +67,16 @@ where
         self.tokens.line()
     }
 
-    /// Returns a parser in which all variables are undefined, in order to produce an expression
-    /// tree that can be evaluated with a different set of variable values than the current one.
-    fn function_def_parser(&mut self) -> Parser<&mut T, (), ()> {
-        Parser {
-            tokens: &mut self.tokens,
-            variables: (),
-            functions: (),
-        }
-    }
-
+    #[cfg(test)]
+    /// Parses the token stream as a single expression, and evaluates it as a value.
     pub fn parse_value(&mut self) -> EResult<Value> {
-        self.parse_expression_1(0).and_then(|exp| {
-            exp.evaluate(&self.variables, &self.functions)
-                .map_err(|err| ParserError::Math(err, self.line()).into())
+        self.parse_expression(0).and_then(|exp| {
+            exp.evaluate(&(), &())
+                .map_err(|err| EvaluatorError::Math(err, self.line()).into())
         })
     }
 
-    fn parse_expression(&mut self) -> EResult<Expression> {
-        self.parse_expression_1(0)
-    }
-
-    fn parse_expression_1(&mut self, min_precedence: usize) -> EResult<Expression> {
+    fn parse_expression(&mut self, min_precedence: usize) -> EResult<Expression> {
         // initial left-hand side
         let mut lhs = self.parse_primary()?;
         // as long as we encounter operators with precedence >= min_precedence, we can accumulate
@@ -108,10 +89,8 @@ where
             {
                 // we have an operator; now to get the right hand side, accumulating operators with
                 // greater precedence than the current one
-                let rhs = self.parse_expression_1(op.precedence + 1)?;
-                lhs = op
-                    .expression(lhs, rhs)
-                    .map_err(|err| ParserError::Math(err, self.line()))?;
+                let rhs = self.parse_expression(op.precedence + 1)?;
+                lhs = op.expression(lhs, rhs);
             } else {
                 // the token wasn't an operator, so put it back on the stack
                 self.put_back(tok);
@@ -127,9 +106,7 @@ where
             Some(Token::LeftParen) => self.parse_parentheses(),
             Some(Token::Number(num)) => Ok(Expression::Value(Value::Number(num))),
             Some(Token::Tag(tag)) => match UnaryBuiltins.get(&tag) {
-                Some(op) => op
-                    .expression(self.parse_expression_1(op.precedence)?)
-                    .map_err(|err| ParserError::Math(err, self.line()).into()),
+                Some(op) => Ok(op.expression(self.parse_expression(op.precedence)?)),
                 None => {
                     let next_tok = try_opt!(self.next());
                     if let Some(Token::LeftParen) = next_tok {
@@ -146,10 +123,7 @@ where
                         if let Some(tok) = next_tok {
                             self.put_back(tok);
                         }
-                        match self.variables.get(&tag) {
-                            Some(&value) => Ok(Expression::Value(value)),
-                            None => Ok(Expression::Variable(tag)),
-                        }
+                        Ok(Expression::Variable(tag))
                     }
                 }
             },
@@ -165,7 +139,7 @@ where
             2 => {
                 let y = list.pop().unwrap();
                 let x = list.pop().unwrap();
-                Expression::point(x, y).map_err(|err| ParserError::Math(err, self.line()))?
+                Expression::Point(Box::new((x, y)))
             }
             n => Err(ParserError::ParenList(n, start_line))?,
         };
@@ -187,7 +161,7 @@ where
                 }
                 _ => self.put_back(tok),
             }
-            list.push(self.parse_expression()?);
+            list.push(self.parse_expression(0)?);
         }
         Ok(list)
     }
@@ -195,7 +169,7 @@ where
     /// Parses a function definition.
     ///
     /// On success, returns a tuple of the function name and the function definition.
-    fn parse_function_def(&mut self) -> EResult<(String, Function)> {
+    fn parse_function_def(&mut self) -> EResult<(Variable, Function)> {
         let tag = expect!(self, Token::Tag(tag), tag);
         expect!(self, Token::LeftParen);
         // maps argument names to their index in the function signature
@@ -235,22 +209,11 @@ where
         }
         expect!(self, Token::Equal);
         // get the function body, as an expression tree
-        let expression = self.function_def_parser().parse_expression()?;
+        let expression = self.parse_expression(0)?;
         Ok((tag, Function { args, expression }))
     }
-}
 
-impl<T, V, F> Parser<T, V, F>
-where
-    T: ParserExt,
-    V: TableMut<Variable, Value>,
-    F: TableMut<Variable, Function>,
-{
-    /// Parse and evaluate a statement.
-    ///
-    /// The `Ok` value indicates whether there are more statements remaining (i.e. whether this
-    /// statement ended with a `;`).
-    fn parse_statement(&mut self) -> EResult<bool> {
+    fn parse_statement(&mut self) -> EResult<Option<StatementKind>> {
         match try_opt!(self.next()) {
             // tag; start of an assignment expression or function definition
             Some(Token::Tag(tag)) => {
@@ -258,7 +221,7 @@ where
                     // function definition
                     "fn" => {
                         let (func_name, func) = self.parse_function_def()?;
-                        self.functions.insert(func_name, func);
+                        Ok(Some(StatementKind::Function(func_name, func)))
                     }
                     // single point
                     "point" => {
@@ -279,24 +242,34 @@ where
                     // other (variable assignment)
                     _ => {
                         expect!(self, Token::Equal);
-                        let value = self.parse_value()?;
-                        self.variables.insert(tag, value);
+                        let expr = self.parse_expression(0)?;
+                        Ok(Some(StatementKind::Variable(tag, expr)))
                     }
                 }
-                match try_opt!(self.next()) {
-                    // end of statement
-                    Some(Token::Semicolon) => Ok(true),
-                    // end of input (also acceptable)
-                    None => Ok(false),
-                    // other token; unexpected
-                    Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                }
             }
+            // semicolon; null statement
+            Some(Token::Semicolon) => Ok(Some(StatementKind::Null)),
             // other token; unexpected
             Some(tok) => Err(ParserError::Token(tok, self.line()))?,
             // empty statement, end of input
-            None => Ok(false),
+            None => Ok(None),
         }
+    }
+}
+
+impl<T> Iterator for Parser<T>
+where
+    T: LexerExt,
+{
+    type Item = EResult<Statement>;
+
+    fn next(&mut self) -> Option<EResult<Statement>> {
+        self.parse_statement().transpose().map(|res| {
+            res.map(|statement| Statement {
+                statement,
+                line: self.line(),
+            })
+        })
     }
 }
 
@@ -305,7 +278,7 @@ mod tests {
     use crate::lexer::Lexer;
     use crate::values::Value;
 
-    use super::ParserExt;
+    use super::LexerExt;
 
     #[test]
     fn basic_arithmetic() {
@@ -449,34 +422,5 @@ mod tests {
             .parse_value()
             .unwrap();
         assert_eq!(result, Value::Number(1.0));
-    }
-
-    #[test]
-    fn variables_set() {
-        let mut parser = Lexer::new("x = 1".as_bytes()).into_parser();
-        assert!(!parser.parse_statement().unwrap());
-        assert_eq!(parser.variables.get("x"), Some(&Value::Number(1.0)));
-    }
-
-    #[test]
-    fn variables_get() {
-        let mut parser = Lexer::new("x = 1; z = x * 2".as_bytes()).into_parser();
-        while parser.parse_statement().unwrap() {}
-        assert_eq!(parser.variables.get("x"), Some(&Value::Number(1.0)));
-        assert_eq!(parser.variables.get("z"), Some(&Value::Number(2.0)));
-    }
-
-    #[test]
-    fn functions() {
-        let mut parser = Lexer::new("fn f(x) = x + 1; y = f(3)".as_bytes()).into_parser();
-        while parser.parse_statement().unwrap() {}
-        assert_eq!(parser.variables.get("y"), Some(&Value::Number(4.0)));
-    }
-
-    #[test]
-    fn functions_2() {
-        let mut parser = Lexer::new("fn f(x, y) = x * y; z = f(3, 2)".as_bytes()).into_parser();
-        while parser.parse_statement().unwrap() {}
-        assert_eq!(parser.variables.get("z"), Some(&Value::Number(6.0)));
     }
 }

@@ -3,7 +3,7 @@ use std::io::BufRead;
 use regex_syntax::is_word_character;
 
 use crate::error::{LexerError, Result as EResult};
-use crate::parser::ParserExt;
+use crate::parser::LexerExt;
 
 pub struct Lexer<R> {
     input: R,
@@ -233,7 +233,7 @@ impl<R: BufRead> Iterator for Lexer<R> {
     }
 }
 
-impl<R: BufRead> ParserExt for Lexer<R> {
+impl<R: BufRead> LexerExt for Lexer<R> {
     fn put_back(&mut self, next: Token) {
         self.put_back = Some(next)
     }

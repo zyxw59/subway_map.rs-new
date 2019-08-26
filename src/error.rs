@@ -15,6 +15,8 @@ pub enum Error {
     Lexer(#[cause] LexerError),
     #[fail(display = "The parser encountered an error: {}", _0)]
     Parser(#[cause] ParserError),
+    #[fail(display = "The evaluator encountered an error: {}", _0)]
+    Evaluator(#[cause] EvaluatorError),
 }
 
 impl From<ParserError> for Error {
@@ -26,6 +28,12 @@ impl From<ParserError> for Error {
 impl From<LexerError> for Error {
     fn from(err: LexerError) -> Error {
         Error::Lexer(err)
+    }
+}
+
+impl From<EvaluatorError> for Error {
+    fn from(err: EvaluatorError) -> Error {
+        Error::Evaluator(err)
     }
 }
 
@@ -44,14 +52,12 @@ pub enum ParserError {
     ParenList(usize, usize),
     #[fail(display = "Repeated argument {} to function {} on line {}", _0, _1, _2)]
     Argument(String, String, usize),
-    #[fail(display = "A math error ({}) occured on line {}", _0, _1)]
-    Math(#[cause] MathError, usize),
 }
 
-impl ParserError {
-    pub fn type_error(expected: Type, got: Type, line: usize) -> ParserError {
-        ParserError::Math(MathError::Type(expected, got), line)
-    }
+#[derive(Fail, Debug)]
+pub enum EvaluatorError {
+    #[fail(display = "A math error ({}) occured on line {}", _0, _1)]
+    Math(#[cause] MathError, usize),
 }
 
 #[derive(Fail, Debug)]
