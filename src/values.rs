@@ -234,18 +234,14 @@ fn sin_deg(x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     macro_rules! assert_eval {
-        (($($expr:tt)+), ($($val:expr),*)) => {
-            {
-                let expr = expression!($($expr)+);
-                assert_eq!(expr.evaluate(&(), &()).unwrap(), value!($($val),*));
-            }
-        };
-        (($($expr:tt)+), $val:expr) => {
-            {
-                let expr = expression!($($expr)+);
-                assert_eq!(expr.evaluate(&(), &()).unwrap(), value!($val));
-            }
-        };
+        (($($expr:tt)+), ($($val:expr),*)) => {{
+            let expr = expression!($($expr)+);
+            assert_eq!(expr.evaluate(&(), &()).unwrap(), value!($($val),*));
+        }};
+        (($($expr:tt)+), $val:expr) => {{
+            let expr = expression!($($expr)+);
+            assert_eq!(expr.evaluate(&(), &()).unwrap(), value!($val));
+        }};
     }
 
     #[test]

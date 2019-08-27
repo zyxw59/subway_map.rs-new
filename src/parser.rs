@@ -350,15 +350,13 @@ mod tests {
     use super::LexerExt;
 
     macro_rules! assert_expression {
-        ($text:expr, ($($expr:tt)+)) => {
-            {
-                let result = Lexer::new($text.as_bytes())
-                    .into_parser()
-                    .parse_expression(0)
-                    .unwrap();
-                assert_eq!(result, expression!($($expr)+));
-            }
-        };
+        ($text:expr, ($($expr:tt)+)) => {{
+            let result = Lexer::new($text.as_bytes())
+                .into_parser()
+                .parse_expression(0)
+                .unwrap();
+            assert_eq!(result, expression!($($expr)+));
+        }};
     }
 
     #[test]

@@ -45,30 +45,23 @@ macro_rules! itry_opt {
 #[cfg(test)]
 /// Macro for building Expressions
 macro_rules! expression {
-    ($op:tt, ($($x:tt)+), ($($y:tt)+)) => {
-        {
-            use $crate::tables::Table;
-            $crate::expressions::Expression::BinaryOperator(
-                $crate::operators::BinaryBuiltins.get($op).unwrap(),
-                Box::new((
-                        expression!($($x)+),
-                        expression!($($y)+),
-                        ))
-            )
-        }
-    };
+    ($op:tt, ($($x:tt)+), ($($y:tt)+)) => {{
+        use $crate::tables::Table;
+        $crate::expressions::Expression::BinaryOperator(
+            $crate::operators::BinaryBuiltins.get($op).unwrap(),
+            Box::new((expression!($($x)+), expression!($($y)+))),
+        )
+    }};
     ($op:tt, ($($x:tt)+), $y:expr) => {
         expression!($op, ($($x)+), ($y))
     };
-    ($op:tt, ($($x:tt)+)) => {
-        {
-            use $crate::tables::Table;
-            $crate::expressions::Expression::UnaryOperator(
-                $crate::operators::UnaryBuiltins.get($op).unwrap(),
-                Box::new(expression!($($x)+)),
-                )
-        }
-    };
+    ($op:tt, ($($x:tt)+)) => {{
+        use $crate::tables::Table;
+        $crate::expressions::Expression::UnaryOperator(
+            $crate::operators::UnaryBuiltins.get($op).unwrap(),
+            Box::new(expression!($($x)+)),
+        )
+    }};
     ($op:tt, $x:expr, ($($y:tt)+)) => {
         expression!($op, ($x), ($($y)+))
     };
@@ -86,10 +79,8 @@ macro_rules! expression {
     };
     (@($($x:tt)+), ($($y:tt)+)) => {
         $crate::expressions::Expression::Point(
-            Box::new((
-                    expression!($($x)+),
-                    expression!($($y)+),
-                    )))
+            Box::new((expression!($($x)+), expression!($($y)+))),
+        )
     };
     (@$x:expr, ($($y:tt)+)) => {
         expression!(@($x), ($($y)+))
