@@ -26,30 +26,30 @@ NW = ss * dir 330;
 point wye = margin + 7.5 * SE;
 
 # antioch line
-points from wye spaced NE: 1/2 st12, st19, mcar, 1/2 c0;
-points from c0  spaced E:  1/2 rock, orin, lafy, 1/2 c35;
-points from c35 spaced NE: 1/2 wcrk, phil, conc, ncon, 1/2 c75;
-points from c75 spaced E:  1/2 pitt, pctr, antc;
+points from wye spaced NE: (1/2) st12, st19, mcar, (1/2) c0;
+points from c0  spaced E:  (1/2) rock, orin, lafy, (1/2) c35;
+points from c35 spaced NE: (1/2) wcrk, phil, conc, ncon, (1/2) c75;
+points from c75 spaced E:  (1/2) pitt, pctr, antc;
 
 # richmond line
-points from c0  spaced NW: 1/2 ashb, dbrk, nbrk, plza, deln, rich;
+points from c0  spaced NW: (1/2) ashb, dbrk, nbrk, plza, deln, rich;
 
 # fremont line
 points from wye spaced SE:
-    1/2 lake, ftvl, cols, sanl, bayf, 1/2 l0,
-    1/2 hayw, shay, ucty, fmnt, warm;
+    (1/2) lake, ftvl, cols, sanl, bayf, (1/2) l0,
+    (1/2) hayw, shay, ucty, fmnt, warm;
 
 # oakland airport connector
 point oakl = cols + SW;
 
 # dublin line
-points from l0  spaced E:  1/2 cast, wdub, dubl;
+points from l0  spaced E:  (1/2) cast, wdub, dubl;
 
 # san francisco line
-points from wye spaced W:  1/2 woak, 3/2 m15;
+points from wye spaced W:  (1/2) woak, 3/2 m15;
 points from m15 spaced SW:
-    1/2 embr, mont, powl, civc, st16, st24, glen, balb, daly, 1/2 w0;
-points from w0  spaced SE: 1/2 colm, ssan, sbrn, 1/2 y0, 1/2 mlbr;
+    (1/2) embr, mont, powl, civc, st16, st24, glen, balb, daly, (1/2) w0;
+points from w0  spaced SE: (1/2) colm, ssan, sbrn, (1/2) y0, (1/2) mlbr;
 
 # sfo line
 point sfia = y0 + ss * dir 60;

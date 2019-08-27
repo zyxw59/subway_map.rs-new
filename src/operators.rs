@@ -1,3 +1,4 @@
+use std::cmp::PartialEq;
 use std::fmt;
 
 use crate::error::MathError;
@@ -133,6 +134,12 @@ impl<'a> fmt::Debug for BinaryOperator<'a> {
     }
 }
 
+impl<'a> PartialEq for BinaryOperator<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.precedence == other.precedence && self.name == other.name
+    }
+}
+
 #[derive(Clone)]
 pub struct UnaryOperator<'a> {
     pub precedence: usize,
@@ -153,5 +160,11 @@ impl<'a> UnaryOperator<'a> {
 impl<'a> fmt::Debug for UnaryOperator<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+impl<'a> PartialEq for UnaryOperator<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.precedence == other.precedence && self.name == other.name
     }
 }

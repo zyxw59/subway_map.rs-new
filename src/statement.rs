@@ -10,7 +10,7 @@ pub struct Statement {
 }
 
 /// A statement.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum StatementKind {
     /// An empty statement.
     Null,
@@ -27,7 +27,7 @@ pub enum StatementKind {
 }
 
 /// A statement declaring one or more points.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PointStatement {
     /// A declaration of a single point.
     Single(Variable, Expression),
@@ -40,13 +40,13 @@ pub enum PointStatement {
     /// A declaration of a sequence of points, using the `from` ... `to` syntax.
     Between {
         from: Variable,
-        to: Variable,
+        to: (Option<Expression>, Variable),
         points: Vec<(Option<Expression>, Variable)>,
     },
 }
 
 /// A declaration of a line.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LineStatement {
     /// The name of the line
     pub name: Variable,
@@ -57,7 +57,7 @@ pub struct LineStatement {
 }
 
 /// A segment in a route.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Segment {
     /// The start point of the segment.
     pub start: Variable,
@@ -68,7 +68,7 @@ pub struct Segment {
 }
 
 /// A declaration of a stop.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StopStatement {
     /// The location of the stop.
     pub point: Variable,
@@ -81,7 +81,7 @@ pub struct StopStatement {
 }
 
 /// A label for a stop.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Label {
     /// The label text.
     pub text: String,
@@ -90,7 +90,7 @@ pub struct Label {
 }
 
 /// The position of a stop label.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum StopPosition {
     End,
     Above,

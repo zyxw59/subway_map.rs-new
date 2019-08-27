@@ -41,3 +41,50 @@ macro_rules! itry_opt {
         itry_opt!($expr)
     };
 }
+
+#[cfg(test)]
+/// Macro for building Expressions
+macro_rules! expression {
+    ($op:tt, ($($x:tt)+), ($($y:tt)+)) => {
+        {
+            use $crate::tables::Table;
+            $crate::expressions::Expression::BinaryOperator(
+                $crate::operators::BinaryBuiltins.get($op).unwrap(),
+                Box::new((
+                        expression!($($x)+),
+                        expression!($($y)+),
+                        ))
+            )
+        }
+    };
+    ($op:tt, $x:expr, $y:expr) => {
+        expression!($op, ($x), ($y))
+    };
+    ($op:tt, $($x:tt)+) => {
+        {
+            use $crate::tables::Table;
+            $crate::expressions::Expression::UnaryOperator(
+                $crate::operators::UnaryBuiltins.get($op).unwrap(),
+                Box::new(expression!($($x)+)),
+                )
+        }
+    };
+    ($op:tt, $x:expr) => {
+        expression!($op, ($x))
+    };
+    ($fn:tt[$(($($x:tt)+)),*]) => {
+        $crate::expressions::Expression::Function(
+            $crate::expressions::Variable::from($fn),
+            vec![$(expression!($($x)+)),*],
+        )
+    };
+    (#$var:expr) => {
+        $crate::expressions::Expression::Variable($crate::expressions::Variable::from($var))
+    };
+    ($x:expr) => {
+        $crate::expressions::Expression::Value($crate::values::Value::Number($x as f64))
+    };
+    ($x:expr, $y:expr) => {
+        $crate::expressions::Expression::Value($crate::values::Value::Point($x as f64, $y as f64))
+    };
+}

@@ -7,7 +7,7 @@ use crate::values::Value;
 
 pub type EResult<T> = Result<T, MathError>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub args: HashMap<Variable, usize>,
     pub expression: Expression,
@@ -49,7 +49,7 @@ impl Table<Variable, Value> for ArgTable<'_> {
 
 pub type Variable = String;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     Value(Value),
     Point(Box<(Expression, Expression)>),

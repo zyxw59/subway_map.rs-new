@@ -4,7 +4,7 @@ use crate::error::{EvaluatorError, ParserError, Result as EResult};
 use crate::expressions::{Expression, Function, Variable};
 use crate::lexer::Token;
 use crate::operators::{BinaryBuiltins, UnaryBuiltins};
-use crate::statement::{Statement, StatementKind};
+use crate::statement::{PointStatement, Statement, StatementKind};
 use crate::tables::Table;
 use crate::values::Value;
 
@@ -217,6 +217,30 @@ where
         Ok((tag, Function { args, expression }))
     }
 
+    fn parse_comma_point_list(&mut self) -> EResult<Vec<(Option<Expression>, Variable)>> {
+        let mut points = Vec::new();
+        while let Some(tok) = try_opt!(self.next()) {
+            let point = match tok {
+                Token::Comma => continue,
+                Token::LeftParen => {
+                    let multiplier = self.parse_expression(0)?;
+                    expect!(self, Token::RightParen);
+                    let ident = expect!(self, Token::Tag(tag) => tag);
+                    (Some(multiplier), ident)
+                }
+                Token::Tag(ident) => (None, ident),
+                _ => Err(ParserError::Token(tok, self.line()))?,
+            };
+            points.push(point);
+            match try_opt!(self.next()) {
+                None => break,
+                Some(Token::Comma) => continue,
+                Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+            }
+        }
+        Ok(points)
+    }
+
     fn parse_statement(&mut self) -> EResult<Option<StatementKind>> {
         match try_opt!(self.next()) {
             // tag; start of an assignment expression or function definition
@@ -229,11 +253,52 @@ where
                     }
                     // single point
                     "point" => {
-                        unimplemented!();
+                        let name = expect!(self, Token::Tag(tag) => tag);
+                        expect!(self, Token::Equal);
+                        let expr = self.parse_expression(0)?;
+                        Ok(Some(StatementKind::Point(PointStatement::Single(
+                            name, expr,
+                        ))))
                     }
                     // sequence of points
                     "points" => {
-                        unimplemented!();
+                        expect!(self, Token::Tag(ref tag) if tag == "from");
+                        let from = expect!(self, Token::Tag(tag) => tag);
+                        let kind = expect!(self, Token::Tag(tag) => tag);
+                        match kind.as_ref() {
+                            // from ... spaced
+                            "spaced" => {
+                                let spaced = self.parse_expression(0)?;
+                                expect!(self, Token::Tag(ref tag) if tag == ":");
+                                let points = self.parse_comma_point_list()?;
+                                Ok(Some(StatementKind::Point(PointStatement::Spaced {
+                                    from,
+                                    spaced,
+                                    points,
+                                })))
+                            }
+                            // from ... to
+                            "to" => {
+                                let to = expect!(
+                                    self,
+                                    Token::LeftParen => {
+                                        let multiplier = self.parse_expression(0)?;
+                                        expect!(self, Token::RightParen);
+                                        let ident = expect!(self, Token::Tag(tag) => tag);
+                                        (Some(multiplier), ident)
+                                    },
+                                    Token::Tag(ident) => (None, ident),
+                                );
+                                expect!(self, Token::Tag(ref tag) if tag == ":");
+                                let points = self.parse_comma_point_list()?;
+                                Ok(Some(StatementKind::Point(PointStatement::Between {
+                                    from,
+                                    to,
+                                    points,
+                                })))
+                            }
+                            _ => Err(ParserError::Token(Token::Tag(tag), self.line()))?,
+                        }
                     }
                     // line
                     "line" => {
@@ -279,7 +344,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::expressions::Expression;
     use crate::lexer::Lexer;
+    use crate::statement::{PointStatement, StatementKind};
     use crate::values::Value;
 
     use super::LexerExt;
@@ -426,5 +493,62 @@ mod tests {
             .parse_value()
             .unwrap();
         assert_eq!(result, Value::Number(1.0));
+    }
+
+    #[test]
+    fn point_single() {
+        let result = Lexer::new("point a = b".as_bytes())
+            .into_parser()
+            .parse_statement()
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            result,
+            StatementKind::Point(PointStatement::Single(
+                "a".to_string(),
+                Expression::Variable("b".to_string())
+            ))
+        );
+    }
+
+    #[test]
+    fn points_spaced() {
+        let result = Lexer::new("points from a spaced x: (1/2) b, c, (1/2) d".as_bytes())
+            .into_parser()
+            .parse_statement()
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            result,
+            StatementKind::Point(PointStatement::Spaced {
+                from: "a".to_string(),
+                spaced: expression!(#"x"),
+                points: vec![
+                    (Some(expression!("/", 1, 2)), "b".to_string()),
+                    (None, "c".to_string()),
+                    (Some(expression!("/", 1, 2)), "d".to_string()),
+                ],
+            })
+        );
+    }
+
+    #[test]
+    fn points_between() {
+        let result = Lexer::new("points from a to (1/2) d: (1/2) b, c".as_bytes())
+            .into_parser()
+            .parse_statement()
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            result,
+            StatementKind::Point(PointStatement::Between {
+                from: "a".to_string(),
+                to: (Some(expression!("/", 1, 2)), "d".to_string()),
+                points: vec![
+                    (Some(expression!("/", 1, 2)), "b".to_string()),
+                    (None, "c".to_string()),
+                ],
+            })
+        );
     }
 }
