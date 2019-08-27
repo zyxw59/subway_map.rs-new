@@ -344,182 +344,124 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::expressions::Expression;
     use crate::lexer::Lexer;
     use crate::statement::{PointStatement, StatementKind};
-    use crate::values::Value;
 
     use super::LexerExt;
 
+    macro_rules! assert_expression {
+        ($text:expr, ($($expr:tt)+)) => {
+            {
+                let result = Lexer::new($text.as_bytes())
+                    .into_parser()
+                    .parse_expression(0)
+                    .unwrap();
+                assert_eq!(result, expression!($($expr)+));
+            }
+        };
+    }
+
     #[test]
     fn basic_arithmetic() {
-        let result = Lexer::new("1+2*3+4".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(11.0));
+        assert_expression!("1+2*3+4", ("+", ("+", 1, ("*", 2, 3)), 4));
     }
 
     #[test]
     fn basic_arithmetic_2() {
-        let result = Lexer::new("1-2*3+4".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(-1.0));
+        assert_expression!("1-2*3+4", ("+", ("-", 1, ("*", 2, 3)), 4));
     }
 
     #[test]
     fn basic_arithmetic_3() {
-        let result = Lexer::new("1-3/2*5".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(-6.5));
+        assert_expression!("1-3/2*5", ("-", 1, ("*", ("/", 3, 2), 5)));
     }
 
     #[test]
     fn hypot() {
-        let result = Lexer::new("3++4".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(5.0));
+        assert_expression!("3++4", ("++", 3, 4));
     }
 
     #[test]
     fn hypot_sub() {
-        let result = Lexer::new("5+-+3".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(4.0));
+        assert_expression!("5+-+3", ("+-+", 5, 3));
     }
 
     #[test]
     fn pow() {
-        let result = Lexer::new("3^4".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(81.0));
+        assert_expression!("3^4", ("^", 3, 4));
     }
 
     #[test]
     fn parentheses() {
-        let result = Lexer::new("(1+2)*3+4".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(13.0));
+        assert_expression!("(1+2)*3+4", ("+", ("*", ("+", 1, 2), 3), 4));
     }
 
     #[test]
     fn points() {
-        let result = Lexer::new("(1,2) + (3,4)".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Point(4.0, 6.0));
+        assert_expression!("(1,2) + (3,4)", ("+", (@1, 2), (@3, 4)));
     }
 
     #[test]
     fn dot_product() {
-        let result = Lexer::new("(1,2) * (3,4)".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(11.0));
+        assert_expression!("(1,2) * (3,4)", ("*", (@1, 2), (@3, 4)));
     }
 
     #[test]
     fn scalar_product() {
-        let result = Lexer::new("3 * (1,2)".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Point(3.0, 6.0));
+        assert_expression!("3 * (1,2)", ("*", 3, (@1, 2)));
     }
 
     #[test]
     fn angle() {
-        let result = Lexer::new("angle (3, 3)".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(45.0));
+        assert_expression!("angle (3, 3)", ("angle", (@3, 3)));
     }
 
     #[test]
     fn unary_minus() {
-        let result = Lexer::new("3* -2".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(-6.0));
-    }
-
-    #[test]
-    fn unary_minus_2() {
-        let result = Lexer::new("-2*3".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(-6.0));
+        assert_expression!("3* -2", ("*", 3, ("-", 2)));
     }
 
     #[test]
     fn unary_minus_3() {
-        let result = Lexer::new("-(1,2)*(3,4)".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(-11.0));
+        assert_expression!("-(1,2)*(3,4)", ("-", ("*", (@1, 2), (@3, 4))));
     }
 
     #[test]
-    fn unary_cos() {
-        let result = Lexer::new("cos 90".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(0.0));
+    fn variable() {
+        assert_expression!("3*x", ("*", 3, (#"x")));
+    }
+
+    macro_rules! assert_statement {
+        ($text:expr, $statement:expr) => {{
+            let result = Lexer::new($text.as_bytes())
+                .into_parser()
+                .parse_statement()
+                .unwrap()
+                .unwrap();
+            assert_eq!(result, $statement);
+        }};
     }
 
     #[test]
-    fn unary_sin() {
-        let result = Lexer::new("sin 90".as_bytes())
-            .into_parser()
-            .parse_value()
-            .unwrap();
-        assert_eq!(result, Value::Number(1.0));
+    fn variable_assignment() {
+        assert_statement!(
+            "a = b",
+            StatementKind::Variable("a".to_string(), expression!(#"b"))
+        );
     }
 
     #[test]
     fn point_single() {
-        let result = Lexer::new("point a = b".as_bytes())
-            .into_parser()
-            .parse_statement()
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            result,
-            StatementKind::Point(PointStatement::Single(
-                "a".to_string(),
-                Expression::Variable("b".to_string())
-            ))
+        assert_statement!(
+            "point a = b",
+            StatementKind::Point(PointStatement::Single("a".to_string(), expression!(#"b")))
         );
     }
 
     #[test]
     fn points_spaced() {
-        let result = Lexer::new("points from a spaced x: (1/2) b, c, (1/2) d".as_bytes())
-            .into_parser()
-            .parse_statement()
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            result,
+        assert_statement!(
+            "points from a spaced x: (1/2) b, c, (1/2) d",
             StatementKind::Point(PointStatement::Spaced {
                 from: "a".to_string(),
                 spaced: expression!(#"x"),
@@ -534,13 +476,8 @@ mod tests {
 
     #[test]
     fn points_between() {
-        let result = Lexer::new("points from a to (1/2) d: (1/2) b, c".as_bytes())
-            .into_parser()
-            .parse_statement()
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            result,
+        assert_statement!(
+            "points from a to (1/2) d: (1/2) b, c",
             StatementKind::Point(PointStatement::Between {
                 from: "a".to_string(),
                 to: (Some(expression!("/", 1, 2)), "d".to_string()),

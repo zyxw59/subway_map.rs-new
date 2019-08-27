@@ -230,3 +230,111 @@ fn sin_deg(x: f64) -> f64 {
         x.to_radians().sin()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    macro_rules! assert_eval {
+        (($($expr:tt)+), ($($val:expr),*)) => {
+            {
+                let expr = expression!($($expr)+);
+                assert_eq!(expr.evaluate(&(), &()).unwrap(), value!($($val),*));
+            }
+        };
+        (($($expr:tt)+), $val:expr) => {
+            {
+                let expr = expression!($($expr)+);
+                assert_eq!(expr.evaluate(&(), &()).unwrap(), value!($val));
+            }
+        };
+    }
+
+    #[test]
+    fn basic_arithmetic() {
+        // 1 + 2 * 3 + 4 == 11
+        assert_eval!(("+", ("+", 1, ("*", 2, 3)), 4), 11)
+    }
+
+    #[test]
+    fn basic_arithmetic_2() {
+        // 1 - 2 * 3 + 4 == -1
+        assert_eval!(("+", ("-", 1, ("*", 2, 3)), 4), -1);
+    }
+
+    #[test]
+    fn basic_arithmetic_3() {
+        // 1 - 3 / 2 * 5 == -6.5
+        assert_eval!(("-", 1, ("*", ("/", 3, 2), 5)), -6.5);
+    }
+
+    #[test]
+    fn hypot() {
+        // 3 ++ 4 == 5
+        assert_eval!(("++", 3, 4), 5);
+    }
+
+    #[test]
+    fn hypot_sub() {
+        // 5 +-+ 3 == 4
+        assert_eval!(("+-+", 5, 3), 4);
+    }
+
+    #[test]
+    fn pow() {
+        // 3 ^ 4 == 81
+        assert_eval!(("^", 3, 4), 81);
+    }
+
+    #[test]
+    fn points() {
+        // (1, 2) + (3, 4) == (4, 6)
+        assert_eval!(("+", (@1, 2), (@3, 4)), (4, 6));
+    }
+
+    #[test]
+    fn dot_product() {
+        // (1, 2) * (3, 4) == 11
+        assert_eval!(("*", (@1, 2), (@3, 4)), 11);
+    }
+
+    #[test]
+    fn scalar_product() {
+        // 3 * (1, 2) == (3, 6)
+        assert_eval!(("*", 3, (@1, 2)), (3, 6));
+    }
+
+    #[test]
+    fn angle() {
+        // angle (3, 3) == 45
+        assert_eval!(("angle", (@3, 3)), 45);
+    }
+
+    #[test]
+    fn unary_minus() {
+        // 3 * -2 == -6
+        assert_eval!(("*", 3, ("-", 2)), -6);
+    }
+
+    #[test]
+    fn unary_minus_2() {
+        // -2 * 3 == -6
+        assert_eval!(("*", ("-", 2), 3), -6);
+    }
+
+    #[test]
+    fn unary_minus_3() {
+        // -(1, 2) * (3, 4) == -11
+        assert_eval!(("-", ("*", (@1, 2), (@3, 4))), -11);
+    }
+
+    #[test]
+    fn unary_cos() {
+        // cos 90 == 0
+        assert_eval!(("cos", 90), 0);
+    }
+
+    #[test]
+    fn unary_sin() {
+        // sin 90 == 1
+        assert_eval!(("sin", 90), 1);
+    }
+}

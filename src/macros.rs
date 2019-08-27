@@ -57,10 +57,10 @@ macro_rules! expression {
             )
         }
     };
-    ($op:tt, $x:expr, $y:expr) => {
-        expression!($op, ($x), ($y))
+    ($op:tt, ($($x:tt)+), $y:expr) => {
+        expression!($op, ($($x)+), ($y))
     };
-    ($op:tt, $($x:tt)+) => {
+    ($op:tt, ($($x:tt)+)) => {
         {
             use $crate::tables::Table;
             $crate::expressions::Expression::UnaryOperator(
@@ -68,6 +68,12 @@ macro_rules! expression {
                 Box::new(expression!($($x)+)),
                 )
         }
+    };
+    ($op:tt, $x:expr, ($($y:tt)+)) => {
+        expression!($op, ($x), ($($y)+))
+    };
+    ($op:tt, $x:expr, $y:expr) => {
+        expression!($op, ($x), ($y))
     };
     ($op:tt, $x:expr) => {
         expression!($op, ($x))
@@ -78,13 +84,36 @@ macro_rules! expression {
             vec![$(expression!($($x)+)),*],
         )
     };
+    (@($($x:tt)+), ($($y:tt)+)) => {
+        $crate::expressions::Expression::Point(
+            Box::new((
+                    expression!($($x)+),
+                    expression!($($y)+),
+                    )))
+    };
+    (@$x:expr, ($($y:tt)+)) => {
+        expression!(@($x), ($($y)+))
+    };
+    (@($($x:tt)+), $y:expr) => {
+        expression!(@($($x)+), ($y))
+    };
+    (@$x:expr, $y:expr) => {
+        expression!(@($x), ($y))
+    };
     (#$var:expr) => {
         $crate::expressions::Expression::Variable($crate::expressions::Variable::from($var))
     };
     ($x:expr) => {
         $crate::expressions::Expression::Value($crate::values::Value::Number($x as f64))
     };
+}
+
+#[cfg(test)]
+macro_rules! value {
+    ($x:expr) => {
+        $crate::values::Value::Number($x as f64)
+    };
     ($x:expr, $y:expr) => {
-        $crate::expressions::Expression::Value($crate::values::Value::Point($x as f64, $y as f64))
+        $crate::values::Value::Point($x as f64, $y as f64)
     };
 }
