@@ -36,11 +36,15 @@ where
 
 macro_rules! expect {
     ($self:ident, $token:pat) => {
-        expect!($self, $token, ())
+        expect!($self, $token => ())
     };
-    ($self:ident, $token:pat, $capture:expr) => {
+    ($self:ident, $token:pat if $guard:expr) => {
+        expect!($self, $token if $guard => ())
+    };
+    ($self:ident, $($token:pat $(if $guard:expr)* => $capture:expr),*$(,)*) => {
         match try_opt!($self.next()) {
-            Some($token) => $capture,
+            $(Some($token) $(if $guard)* => $capture),*,
+            #[allow(unreachable_patterns)] // to allow for expect!(self, tok, tok)
             Some(tok) => Err(ParserError::Token(tok, $self.line()))?,
             None => Err(ParserError::EndOfInput($self.line()))?,
         }
@@ -170,7 +174,7 @@ where
     ///
     /// On success, returns a tuple of the function name and the function definition.
     fn parse_function_def(&mut self) -> EResult<(Variable, Function)> {
-        let tag = expect!(self, Token::Tag(tag), tag);
+        let tag = expect!(self, Token::Tag(tag) => tag);
         expect!(self, Token::LeftParen);
         // maps argument names to their index in the function signature
         let mut args = HashMap::new();
