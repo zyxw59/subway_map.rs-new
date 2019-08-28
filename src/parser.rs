@@ -1,6 +1,6 @@
 use std::collections::{hash_map::Entry, HashMap};
 
-use crate::error::{EvaluatorError, ParserError, Result as EResult};
+use crate::error::{ParserError, Result as EResult};
 use crate::expressions::{Expression, Function, Variable};
 use crate::lexer::Token;
 use crate::operators::{BinaryBuiltins, UnaryBuiltins};
@@ -69,15 +69,6 @@ where
 
     fn line(&self) -> usize {
         self.tokens.line()
-    }
-
-    #[cfg(test)]
-    /// Parses the token stream as a single expression, and evaluates it as a value.
-    pub fn parse_value(&mut self) -> EResult<Value> {
-        self.parse_expression(0).and_then(|exp| {
-            exp.evaluate(&(), &())
-                .map_err(|err| EvaluatorError::Math(err, self.line()).into())
-        })
     }
 
     fn parse_expression(&mut self, min_precedence: usize) -> EResult<Expression> {

@@ -16,7 +16,7 @@ pub struct Function {
 impl Function {
     fn apply(
         &self,
-        args: &Vec<Expression>,
+        args: &[Expression],
         vars: &impl Table<Variable, Value>,
         funcs: &impl Table<Variable, Function>,
     ) -> EResult<Value> {

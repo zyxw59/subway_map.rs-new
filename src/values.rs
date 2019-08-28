@@ -86,10 +86,8 @@ impl Value {
     pub fn eq(self, other: Value) -> Result {
         use self::Value::*;
         match (self, other) {
-            (Number(x), Number(y)) => Ok(Value::Number((x == y) as u8 as f64)),
-            (Point(x1, y1), Point(x2, y2)) => {
-                Ok(Value::Number((x1 == x2 && y1 == y2) as u8 as f64))
-            }
+            (Number(x), Number(y)) => Ok(Value::from(float_eq(x, y))),
+            (Point(x1, y1), Point(x2, y2)) => Ok(Value::from(float_eq(x1, x2) && float_eq(y1, y2))),
             _ => Err(MathError::Type(self.into(), other.into())),
         }
     }
@@ -97,9 +95,9 @@ impl Value {
     pub fn ne(self, other: Value) -> Result {
         use self::Value::*;
         match (self, other) {
-            (Number(x), Number(y)) => Ok(Value::Number((x != y) as u8 as f64)),
+            (Number(x), Number(y)) => Ok(Value::from(!float_eq(x, y))),
             (Point(x1, y1), Point(x2, y2)) => {
-                Ok(Value::Number((x1 != x2 || y1 != y2) as u8 as f64))
+                Ok(Value::from(!float_eq(x1, x2) || !float_eq(y1, y2)))
             }
             _ => Err(MathError::Type(self.into(), other.into())),
         }
@@ -108,7 +106,7 @@ impl Value {
     pub fn lt(self, other: Value) -> Result {
         use self::Value::*;
         match (self, other) {
-            (Number(x), Number(y)) => Ok(Value::Number((x < y) as u8 as f64)),
+            (Number(x), Number(y)) => Ok(Value::from(x < y)),
             _ => Err(MathError::Type(Type::Number, self.into())),
         }
     }
@@ -116,7 +114,7 @@ impl Value {
     pub fn le(self, other: Value) -> Result {
         use self::Value::*;
         match (self, other) {
-            (Number(x), Number(y)) => Ok(Value::Number((x <= y) as u8 as f64)),
+            (Number(x), Number(y)) => Ok(Value::from(x <= y)),
             _ => Err(MathError::Type(Type::Number, self.into())),
         }
     }
@@ -124,7 +122,7 @@ impl Value {
     pub fn gt(self, other: Value) -> Result {
         use self::Value::*;
         match (self, other) {
-            (Number(x), Number(y)) => Ok(Value::Number((x > y) as u8 as f64)),
+            (Number(x), Number(y)) => Ok(Value::from(x > y)),
             _ => Err(MathError::Type(Type::Number, self.into())),
         }
     }
@@ -132,7 +130,7 @@ impl Value {
     pub fn ge(self, other: Value) -> Result {
         use self::Value::*;
         match (self, other) {
-            (Number(x), Number(y)) => Ok(Value::Number((x >= y) as u8 as f64)),
+            (Number(x), Number(y)) => Ok(Value::from(x >= y)),
             _ => Err(MathError::Type(Type::Number, self.into())),
         }
     }
@@ -204,14 +202,20 @@ impl ops::Neg for Value {
     }
 }
 
+impl From<bool> for Value {
+    fn from(b: bool) -> Value {
+        Value::Number(f64::from(b as u8))
+    }
+}
+
 fn cos_deg(x: f64) -> f64 {
     // since cos is even, we can take |x|, which guarantees that |x| % 360 is nonnegative
     let x = x.abs() % 360.0;
-    if x == 0.0 {
+    if float_eq(x, 0.0) {
         1.0
-    } else if x == 180.0 {
+    } else if float_eq(x, 180.0) {
         -1.0
-    } else if x == 90.0 || x == 270.0 {
+    } else if float_eq(x, 90.0) || float_eq(x, 270.0) {
         0.0
     } else {
         x.to_radians().cos()
@@ -220,15 +224,19 @@ fn cos_deg(x: f64) -> f64 {
 
 fn sin_deg(x: f64) -> f64 {
     let x = x % 360.0;
-    if x == 0.0 || x == 180.0 || x == -180.0 {
+    if float_eq(x, 0.0) || float_eq(x, 180.0) || float_eq(x, -180.0) {
         0.0
-    } else if x == 90.0 || x == -270.0 {
+    } else if float_eq(x, 90.0) || float_eq(x, -270.0) {
         1.0
-    } else if x == -90.0 || x == 270.0 {
+    } else if float_eq(x, -90.0) || float_eq(x, 270.0) {
         -1.0
     } else {
         x.to_radians().sin()
     }
+}
+
+fn float_eq(x: f64, y: f64) -> bool {
+    (x - y).abs() < ::std::f64::EPSILON
 }
 
 #[cfg(test)]

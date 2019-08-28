@@ -199,7 +199,7 @@ impl<R: BufRead> Lexer<R> {
         if mantissa == 0 {
             Ok(Token::Number(0.0))
         } else if exponent == 0 {
-            return Ok(Token::Number(mantissa as f64));
+            Ok(Token::Number(mantissa as f64))
         } else {
             Ok(Token::Number(10.0_f64.powi(exponent) * mantissa as f64))
         }
