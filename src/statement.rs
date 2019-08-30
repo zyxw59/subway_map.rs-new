@@ -21,7 +21,14 @@ pub enum StatementKind {
     /// A declaration of one or more points.
     Point(PointStatement),
     /// A declaration of a line.
-    Line(LineStatement),
+    Line {
+        /// The name of the line
+        name: Variable,
+        /// The style of the line
+        style: Option<Variable>,
+        /// The route of the line
+        route: Vec<Segment>,
+    },
     /// A declaration of a stop.
     Stop(StopStatement),
 }

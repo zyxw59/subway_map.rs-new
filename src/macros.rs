@@ -108,3 +108,14 @@ macro_rules! value {
         $crate::values::Value::Point($x as f64, $y as f64)
     };
 }
+
+#[cfg(test)]
+macro_rules! segment {
+    ($start:expr, $end:expr, $($expr:tt)*) => {
+        $crate::statement::Segment {
+            start: $crate::expressions::Variable::from($start),
+            end: $crate::expressions::Variable::from($end),
+            offset: expression!($($expr)*),
+        }
+    }
+}

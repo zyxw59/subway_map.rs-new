@@ -4,7 +4,7 @@ use crate::error::{ParserError, Result as EResult};
 use crate::expressions::{Expression, Function, Variable};
 use crate::lexer::Token;
 use crate::operators::{BinaryBuiltins, UnaryBuiltins};
-use crate::statement::{PointStatement, Statement, StatementKind};
+use crate::statement::{PointStatement, Segment, Statement, StatementKind};
 use crate::tables::Table;
 use crate::values::Value;
 
@@ -232,6 +232,29 @@ where
         Ok(points)
     }
 
+    fn parse_route(&mut self) -> EResult<Vec<Segment>> {
+        let mut route = Vec::new();
+        let mut start = expect!(self, Token::Tag(tag) => tag);
+        while let Some(tok) = try_opt!(self.next()) {
+            self.put_back(tok);
+            expect!(self,
+                Token::Tag(ref tag) if tag == "--" => {},
+                Token::Semicolon => {
+                    self.put_back(Token::Semicolon);
+                    break
+                },
+            );
+            expect!(self, Token::LeftParen);
+            let offset = self.parse_expression(0)?;
+            expect!(self, Token::RightParen);
+            let end = expect!(self, Token::Tag(tag) => tag);
+            let next = end.clone();
+            route.push(Segment { start, end, offset });
+            start = next;
+        }
+        Ok(route)
+    }
+
     fn parse_statement(&mut self) -> EResult<Option<StatementKind>> {
         match try_opt!(self.next()) {
             // tag; start of an assignment expression or function definition
@@ -293,7 +316,19 @@ where
                     }
                     // line
                     "line" => {
-                        unimplemented!();
+                        let tag = expect!(self, Token::Tag(tag) => tag);
+                        let style = if tag == "." {
+                            // next token is a style, then the line name will follow
+                            expect!(self, Token::Tag(tag) => Some(tag))
+                        } else {
+                            // no style, just a line name
+                            self.put_back(Token::Tag(tag));
+                            None
+                        };
+                        let name = expect!(self, Token::Tag(tag) => tag);
+                        expect!(self, Token::Tag(ref tag) if tag == ":");
+                        let route = self.parse_route()?;
+                        Ok(Some(StatementKind::Line { name, style, route }))
                     }
                     // stop
                     "stop" => {
@@ -482,5 +517,29 @@ mod tests {
                 ],
             })
         );
+    }
+
+    #[test]
+    fn line() {
+        assert_statement!(
+            "line red: a --(1) b --(1) c",
+            StatementKind::Line {
+                style: None,
+                name: "red".to_string(),
+                route: vec![segment!("a", "b", 1), segment!("b", "c", 1),],
+            }
+        )
+    }
+
+    #[test]
+    fn line_with_style() {
+        assert_statement!(
+            "line.narrow red: a --(1) b --(1) c",
+            StatementKind::Line {
+                style: Some("narrow".to_string()),
+                name: "red".to_string(),
+                route: vec![segment!("a", "b", 1), segment!("b", "c", 1),],
+            }
+        )
     }
 }
