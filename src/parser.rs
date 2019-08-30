@@ -308,7 +308,10 @@ where
                 }
             }
             // semicolon; null statement
-            Some(Token::Semicolon) => Ok(Some(StatementKind::Null)),
+            Some(Token::Semicolon) => {
+                self.put_back(Token::Semicolon);
+                Ok(Some(StatementKind::Null))
+            }
             // other token; unexpected
             Some(tok) => Err(ParserError::Token(tok, self.line()))?,
             // empty statement, end of input
@@ -325,9 +328,12 @@ where
 
     fn next(&mut self) -> Option<EResult<Statement>> {
         self.parse_statement().transpose().map(|res| {
-            res.map(|statement| Statement {
-                statement,
-                line: self.line(),
+            res.and_then(|statement| {
+                expect!(self, Token::Semicolon);
+                Ok(Statement {
+                    statement,
+                    line: self.line(),
+                })
             })
         })
     }
