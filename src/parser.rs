@@ -35,15 +35,12 @@ where
 }
 
 macro_rules! expect {
-    ($self:ident, $token:pat) => {
-        expect!($self, $token => ())
+    ($self:ident, $token:pat $(if $guard:expr)?) => {
+        expect!($self, $token $(if $guard)? => ())
     };
-    ($self:ident, $token:pat if $guard:expr) => {
-        expect!($self, $token if $guard => ())
-    };
-    ($self:ident, $($token:pat $(if $guard:expr)* => $capture:expr),*$(,)*) => {
+    ($self:ident, $($token:pat $(if $guard:expr)? => $capture:expr),*$(,)*) => {
         match try_opt!($self.next()) {
-            $(Some($token) $(if $guard)* => $capture),*,
+            $(Some($token) $(if $guard)? => $capture),*,
             #[allow(unreachable_patterns)] // to allow for expect!(self, tok, tok)
             Some(tok) => Err(ParserError::Token(tok, $self.line()))?,
             None => Err(ParserError::EndOfInput($self.line()))?,
