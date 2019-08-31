@@ -1,10 +1,11 @@
 use std::collections::{hash_map::Entry, HashMap};
+use std::convert::TryInto;
 
 use crate::error::{ParserError, Result as EResult};
 use crate::expressions::{Expression, Function, Variable};
 use crate::lexer::Token;
 use crate::operators::{BinaryBuiltins, UnaryBuiltins};
-use crate::statement::{PointStatement, Segment, Statement, StatementKind};
+use crate::statement::{Label, PointStatement, Segment, Statement, StatementKind};
 use crate::tables::Table;
 use crate::values::Value;
 
@@ -329,7 +330,49 @@ where
                     }
                     // stop
                     "stop" => {
-                        unimplemented!();
+                        let tag = expect!(self, Token::Tag(tag) => tag);
+                        let style = if tag == "." {
+                            // next token is a style, then the line name will follow
+                            expect!(self, Token::Tag(tag) => Some(tag))
+                        } else {
+                            // no style, just a line name
+                            self.put_back(Token::Tag(tag));
+                            None
+                        };
+                        let point = expect!(self, Token::Tag(tag) => tag);
+                        expect!(self, Token::LeftParen);
+                        let tag = expect!(self, Token::Tag(tag) => tag);
+                        let lines = if tag == "all" {
+                            expect!(self, Token::RightParen);
+                            None
+                        } else {
+                            self.put_back(Token::Tag(tag));
+                            let mut lines = Vec::new();
+                            loop {
+                                expect!(self, Token::Tag(tag) => lines.push(tag));
+                                expect!(self, Token::RightParen => break, Token::Comma => {});
+                            }
+                            Some(lines)
+                        };
+                        let label = expect!(self,
+                            Token::String(text) => {
+                                let tag = expect!(self, Token::Tag(tag) => tag);
+                                let position = tag.try_into().map_err(|tag| {
+                                    ParserError::Token(Token::Tag(tag), self.line())
+                                })?;
+                                Some(Label { text, position })
+                            },
+                            Token::Semicolon => {
+                                self.put_back(Token::Semicolon);
+                                None
+                            },
+                        );
+                        Ok(Some(StatementKind::Stop {
+                            point,
+                            style,
+                            lines,
+                            label,
+                        }))
                     }
                     // other (variable assignment)
                     _ => {
@@ -374,7 +417,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::lexer::Lexer;
-    use crate::statement::{PointStatement, StatementKind};
+    use crate::statement::{Label, LabelPosition, PointStatement, StatementKind};
 
     use super::LexerExt;
 
@@ -536,6 +579,67 @@ mod tests {
                 style: Some("narrow".to_string()),
                 name: "red".to_string(),
                 route: vec![segment!("a", "b", 1), segment!("b", "c", 1),],
+            }
+        )
+    }
+
+    #[test]
+    fn stop() {
+        assert_statement!(
+            r#"stop a (all) "A" above"#,
+            StatementKind::Stop {
+                style: None,
+                point: "a".to_string(),
+                lines: None,
+                label: Some(Label {
+                    text: "A".to_string(),
+                    position: LabelPosition::Above,
+                }),
+            }
+        )
+    }
+
+    #[test]
+    fn stop_with_style() {
+        assert_statement!(
+            r#"stop.terminus a (all) "A" end"#,
+            StatementKind::Stop {
+                style: Some("terminus".to_string()),
+                point: "a".to_string(),
+                lines: None,
+                label: Some(Label {
+                    text: "A".to_string(),
+                    position: LabelPosition::End,
+                }),
+            }
+        )
+    }
+
+    #[test]
+    fn stop_with_lines() {
+        assert_statement!(
+            r#"stop a (red, blue) "A" above"#,
+            StatementKind::Stop {
+                style: None,
+                point: "a".to_string(),
+                lines: Some(vec!["red".to_string(), "blue".to_string()]),
+                label: Some(Label {
+                    text: "A".to_string(),
+                    position: LabelPosition::Above,
+                }),
+            }
+        )
+    }
+
+    #[test]
+    fn stop_no_label() {
+        assert_statement!(
+            "stop a (all);",
+            StatementKind::Stop {
+                style: None,
+                point: "a".to_string(),
+                lines: None,
+                label: None,
             }
         )
     }

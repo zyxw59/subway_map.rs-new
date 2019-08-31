@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use crate::expressions::{Expression, Function, Variable};
 
 /// A statement, annotated with a line number.
@@ -30,7 +32,16 @@ pub enum StatementKind {
         route: Vec<Segment>,
     },
     /// A declaration of a stop.
-    Stop(StopStatement),
+    Stop {
+        /// The location of the stop.
+        point: Variable,
+        /// The style of the stop.
+        style: Option<Variable>,
+        /// The set of lines which stop at the stop, or `None` if all lines stop.
+        lines: Option<Vec<Variable>>,
+        /// The label.
+        label: Option<Label>,
+    },
 }
 
 /// A statement declaring one or more points.
@@ -74,34 +85,36 @@ pub struct Segment {
     pub offset: Expression,
 }
 
-/// A declaration of a stop.
-#[derive(Clone, Debug, PartialEq)]
-pub struct StopStatement {
-    /// The location of the stop.
-    pub point: Variable,
-    /// The style of the stop.
-    pub style: Variable,
-    /// The set of lines which stop at the stop, or `None` if all lines stop.
-    pub lines: Option<Vec<Variable>>,
-    /// The label.
-    pub label: Option<Label>,
-}
-
 /// A label for a stop.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Label {
     /// The label text.
     pub text: String,
     /// The positioning of the label.
-    pub position: StopPosition,
+    pub position: LabelPosition,
 }
 
 /// The position of a stop label.
 #[derive(Clone, Debug, PartialEq)]
-pub enum StopPosition {
+pub enum LabelPosition {
     End,
     Above,
     Below,
     Left,
     Right,
+}
+
+impl TryFrom<String> for LabelPosition {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_ref() {
+            "end" => Ok(LabelPosition::End),
+            "above" => Ok(LabelPosition::Above),
+            "below" => Ok(LabelPosition::Below),
+            "left" => Ok(LabelPosition::Left),
+            "right" => Ok(LabelPosition::Right),
+            _ => Err(value),
+        }
+    }
 }
