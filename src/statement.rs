@@ -63,17 +63,6 @@ pub enum PointStatement {
     },
 }
 
-/// A declaration of a line.
-#[derive(Clone, Debug, PartialEq)]
-pub struct LineStatement {
-    /// The name of the line
-    pub name: Variable,
-    /// The style of the line
-    pub style: Option<Variable>,
-    /// The route of the line
-    pub route: Vec<Segment>,
-}
-
 /// A segment in a route.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Segment {
