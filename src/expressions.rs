@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::error::{MathError, Type};
+use crate::error::MathError;
 use crate::operators::{BinaryOperator, UnaryOperator};
 use crate::tables::{Chain, Table};
 use crate::values::Value;
@@ -63,17 +63,6 @@ pub enum Expression {
 }
 
 impl Expression {
-    pub fn point(x: Expression, y: Expression) -> EResult<Expression> {
-        use self::Expression::Value;
-        use self::Value::*;
-        match (x, y) {
-            (Value(Number(x)), Value(Number(y))) => Ok(Value(Point(x, y))),
-            (Value(Number(_)), Value(y)) => Err(MathError::Type(Type::Number, y.into())),
-            (Value(x), _) => Err(MathError::Type(Type::Number, x.into())),
-            (x, y) => Ok(Expression::Point(Box::new((x, y)))),
-        }
-    }
-
     pub fn evaluate(
         &self,
         vars: &impl Table<Variable, Value>,
