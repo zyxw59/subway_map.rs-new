@@ -58,6 +58,11 @@ pub enum ParserError {
 pub enum EvaluatorError {
     #[fail(display = "A math error ({}) occured on line {}", _0, _1)]
     Math(#[cause] MathError, usize),
+    #[fail(
+        display = "Point ({}) redefined on line {} (originally defined on line {}",
+        _0, _1, _2
+    )]
+    PointRedefinition(Variable, usize, usize),
 }
 
 #[derive(Fail, Debug)]

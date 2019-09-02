@@ -1,15 +1,18 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 
 use crate::error::{EvaluatorError, Result as EResult};
 use crate::expressions::{Function, Variable};
-use crate::statement::{Statement, StatementKind};
+use crate::points::PointCollection;
+use crate::statement::{PointStatement, Statement, StatementKind};
 use crate::tables::TableMut;
-use crate::values::Value;
+use crate::values::{Point, Value};
 
 #[derive(Default)]
 pub struct Evaluator<V = HashMap<Variable, Value>, F = HashMap<Variable, Function>> {
     variables: V,
     functions: F,
+    points: PointCollection,
 }
 
 impl Evaluator {
@@ -17,6 +20,7 @@ impl Evaluator {
         Evaluator {
             variables: HashMap::new(),
             functions: HashMap::new(),
+            points: PointCollection::new(),
         }
     }
 }
@@ -45,6 +49,17 @@ where
             StatementKind::Function(name, function) => {
                 self.functions.insert(name, function);
             }
+            StatementKind::Point(PointStatement::Single(name, expr)) => {
+                if let Some(original_line) = self.points.get_point_line_number(&name) {
+                    return Err(EvaluatorError::PointRedefinition(name, line, original_line).into());
+                }
+                let value = expr
+                    .evaluate(&self.variables, &self.functions)
+                    .and_then(Point::try_from)
+                    .map_err(|err| EvaluatorError::Math(err, line))?;
+                self.variables.insert(name.clone(), value.into());
+                self.points.insert_point(name, value, line);
+            }
             _ => {
                 unimplemented!();
             }
@@ -57,7 +72,7 @@ where
 mod tests {
     use crate::lexer::Lexer;
     use crate::parser::LexerExt;
-    use crate::values::Value;
+    use crate::values::{Point, Value};
 
     use super::Evaluator;
 
@@ -92,5 +107,14 @@ mod tests {
         let mut evaluator = Evaluator::new();
         evaluator.evaluate_all(parser).unwrap();
         assert_eq!(evaluator.variables.get("z"), Some(&Value::Number(6.0)));
+    }
+
+    #[test]
+    fn point_single() {
+        let parser = Lexer::new("point a = (1, 1);".as_bytes()).into_parser();
+        let mut evaluator = Evaluator::new();
+        evaluator.evaluate_all(parser).unwrap();
+        assert_eq!(evaluator.variables.get("a"), Some(&Value::Point(1.0, 1.0)));
+        assert_eq!(evaluator.points.get_point("a"), Some(Point(1.0, 1.0)));
     }
 }

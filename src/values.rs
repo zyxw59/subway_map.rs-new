@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::ops;
 use std::result;
 
@@ -25,6 +26,26 @@ macro_rules! numeric_fn {
             x => Err(MathError::Type(Type::Number, x.into())),
         }
     };
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Point(pub f64, pub f64);
+
+impl TryFrom<Value> for Point {
+    type Error = MathError;
+
+    fn try_from(value: Value) -> result::Result<Point, MathError> {
+        match value {
+            Value::Point(x, y) => Ok(Point(x, y)),
+            _ => Err(MathError::Type(Type::Point, value.into())),
+        }
+    }
+}
+
+impl From<Point> for Value {
+    fn from(point: Point) -> Value {
+        Value::Point(point.0, point.1)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
