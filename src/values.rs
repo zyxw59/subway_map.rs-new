@@ -31,6 +31,22 @@ macro_rules! numeric_fn {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Point(pub f64, pub f64);
 
+impl ops::Add for Point {
+    type Output = Point;
+
+    fn add(self, other: Point) -> Point {
+        Point(self.0 + other.0, self.1 + other.1)
+    }
+}
+
+impl ops::Mul<Point> for f64 {
+    type Output = Point;
+
+    fn mul(self, other: Point) -> Point {
+        Point(self * other.0, self * other.1)
+    }
+}
+
 impl TryFrom<Value> for Point {
     type Error = MathError;
 
@@ -38,6 +54,17 @@ impl TryFrom<Value> for Point {
         match value {
             Value::Point(x, y) => Ok(Point(x, y)),
             _ => Err(MathError::Type(Type::Point, value.into())),
+        }
+    }
+}
+
+impl TryFrom<Value> for f64 {
+    type Error = MathError;
+
+    fn try_from(value: Value) -> result::Result<f64, MathError> {
+        match value {
+            Value::Number(x) => Ok(x),
+            _ => Err(MathError::Type(Type::Number, value.into())),
         }
     }
 }

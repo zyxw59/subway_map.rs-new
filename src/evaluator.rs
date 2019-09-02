@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
-use crate::error::{EvaluatorError, Result as EResult};
+use crate::error::{EvaluatorError, MathError, Result as EResult};
 use crate::expressions::{Function, Variable};
 use crate::points::PointCollection;
 use crate::statement::{PointStatement, Statement, StatementKind};
@@ -50,6 +50,7 @@ where
                 self.functions.insert(name, function);
             }
             StatementKind::Point(PointStatement::Single(name, expr)) => {
+                // points can't be redefined, since lines are defined in terms of them
                 if let Some(original_line) = self.points.get_point_line_number(&name) {
                     return Err(EvaluatorError::PointRedefinition(name, line, original_line).into());
                 }
@@ -59,6 +60,42 @@ where
                     .map_err(|err| EvaluatorError::Math(err, line))?;
                 self.variables.insert(name.clone(), value.into());
                 self.points.insert_point(name, value, line);
+            }
+            StatementKind::Point(PointStatement::Spaced {
+                from,
+                spaced,
+                points,
+            }) => {
+                let spacing = spaced
+                    .evaluate(&self.variables, &self.functions)
+                    .and_then(Point::try_from)
+                    .map_err(|err| EvaluatorError::Math(err, line))?;
+                let from_point = if let Some(from_point) = self.points.get_point(&from) {
+                    from_point
+                } else {
+                    return Err(EvaluatorError::Math(MathError::Variable(from), line).into());
+                };
+                let mut distance = 0.0;
+                let mut new_points = Vec::new();
+                for (multiplier, name) in points {
+                    // check for redefinition of point
+                    if let Some(original_line) = self.points.get_point_line_number(&name) {
+                        return Err(
+                            EvaluatorError::PointRedefinition(name, line, original_line).into()
+                        );
+                    }
+                    distance += if let Some(expr) = multiplier {
+                        expr.evaluate(&self.variables, &self.functions)
+                            .and_then(f64::try_from)
+                            .map_err(|err| EvaluatorError::Math(err, line))?
+                    } else {
+                        1.0
+                    };
+                    let point = from_point + distance * spacing;
+                    self.variables.insert(name.clone(), point.into());
+                    new_points.push((name, point));
+                }
+                self.points.new_line(from, new_points, line);
             }
             _ => {
                 unimplemented!();
