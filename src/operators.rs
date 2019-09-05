@@ -3,7 +3,6 @@ use std::fmt;
 
 use crate::error::MathError;
 use crate::expressions::Expression;
-use crate::tables::Table;
 use crate::values::Value;
 
 type EResult<T> = Result<T, MathError>;
@@ -69,11 +68,8 @@ mod builtins {
 
 pub struct BinaryBuiltins;
 
-impl<K> Table<K, BinaryOperator<'static>> for BinaryBuiltins
-where
-    K: ?Sized + AsRef<str>,
-{
-    fn get(&self, key: &K) -> Option<&'static BinaryOperator<'static>> {
+impl BinaryBuiltins {
+    pub fn get(&self, key: &str) -> Option<&'static BinaryOperator<'static>> {
         match key.as_ref() {
             "==" => Some(&builtins::EQ),
             "!=" => Some(&builtins::NE),
@@ -95,11 +91,8 @@ where
 
 pub struct UnaryBuiltins;
 
-impl<K> Table<K, UnaryOperator<'static>> for UnaryBuiltins
-where
-    K: ?Sized + AsRef<str>,
-{
-    fn get(&self, key: &K) -> Option<&'static UnaryOperator<'static>> {
+impl UnaryBuiltins {
+    pub fn get(&self, key: &str) -> Option<&'static UnaryOperator<'static>> {
         match key.as_ref() {
             "-" => Some(&builtins::NEG),
             "cos" => Some(&builtins::COS),

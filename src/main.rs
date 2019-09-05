@@ -8,7 +8,6 @@ mod operators;
 pub mod parser;
 pub mod points;
 pub mod statement;
-pub mod tables;
 mod values;
 
 fn main() {

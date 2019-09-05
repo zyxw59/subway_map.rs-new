@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::error::MathError;
+use crate::evaluator::EvaluationContext;
 use crate::operators::{BinaryOperator, UnaryOperator};
-use crate::tables::{Chain, Table};
 use crate::values::Value;
 
 pub type EResult<T> = Result<T, MathError>;
@@ -14,36 +14,41 @@ pub struct Function {
 }
 
 impl Function {
-    fn apply(
-        &self,
-        args: &[Expression],
-        vars: &impl Table<Variable, Value>,
-        funcs: &impl Table<Variable, Function>,
-    ) -> EResult<Value> {
+    fn apply(&self, args: &[Expression], context: &impl EvaluationContext) -> EResult<Value> {
         let expected = self.args.len();
         let got = args.len();
         if expected != got {
             return Err(MathError::Arguments(expected, got));
         }
-        let locals = ArgTable {
-            order: &self.args,
+        let locals = FunctionEvaluator {
+            parent: context,
+            arg_order: &self.args,
             args: args
                 .iter()
-                .map(|arg| arg.evaluate(vars, funcs))
+                .map(|arg| arg.evaluate(context))
                 .collect::<EResult<Vec<Value>>>()?,
         };
-        self.expression.evaluate(&Chain(&locals, vars), funcs)
+        self.expression.evaluate(&locals)
     }
 }
 
-struct ArgTable<'a> {
-    order: &'a HashMap<Variable, usize>,
+pub struct FunctionEvaluator<'a, 'b> {
+    parent: &'a dyn EvaluationContext,
+    arg_order: &'b HashMap<Variable, usize>,
     args: Vec<Value>,
 }
 
-impl Table<Variable, Value> for ArgTable<'_> {
-    fn get(&self, key: &Variable) -> Option<&Value> {
-        self.order.get(key).and_then(|&i| self.args.get(i))
+impl<'a, 'b> EvaluationContext for FunctionEvaluator<'a, 'b> {
+    fn get_variable(&self, name: &str) -> Option<Value> {
+        self.arg_order
+            .get(name)
+            .and_then(|&i| self.args.get(i))
+            .copied()
+            .or_else(|| self.parent.get_variable(name))
+    }
+
+    fn get_function(&self, name: &str) -> Option<&Function> {
+        self.parent.get_function(name)
     }
 }
 
@@ -63,29 +68,25 @@ pub enum Expression {
 }
 
 impl Expression {
-    pub fn evaluate(
-        &self,
-        vars: &impl Table<Variable, Value>,
-        funcs: &impl Table<Variable, Function>,
-    ) -> EResult<Value> {
+    pub fn evaluate(&self, context: &impl EvaluationContext) -> EResult<Value> {
         Ok(match self {
             Expression::Value(v) => *v,
             Expression::Point(p) => {
                 let (x, y) = p.as_ref();
-                Value::point(x.evaluate(vars, funcs)?, y.evaluate(vars, funcs)?)?
+                Value::point(x.evaluate(context)?, y.evaluate(context)?)?
             }
             Expression::BinaryOperator(op, args) => {
                 let (lhs, rhs) = args.as_ref();
-                op.apply(lhs.evaluate(vars, funcs)?, rhs.evaluate(vars, funcs)?)?
+                op.apply(lhs.evaluate(context)?, rhs.evaluate(context)?)?
             }
-            Expression::UnaryOperator(op, arg) => op.apply(arg.evaluate(vars, funcs)?)?,
-            Expression::Function(func_name, args) => match funcs.get(&func_name) {
-                None => Err(MathError::Function(func_name.clone()))?,
-                Some(func) => func.apply(args, vars, funcs)?,
+            Expression::UnaryOperator(op, arg) => op.apply(arg.evaluate(context)?)?,
+            Expression::Function(func_name, args) => match context.get_function(&func_name) {
+                None => return Err(MathError::Function(func_name.clone())),
+                Some(func) => func.apply(args, context)?,
             },
-            Expression::Variable(var) => match vars.get(&var) {
-                None => Err(MathError::Variable(var.clone()))?,
-                Some(val) => *val,
+            Expression::Variable(var) => match context.get_variable(&var) {
+                None => return Err(MathError::Variable(var.clone())),
+                Some(val) => val,
             },
         })
     }

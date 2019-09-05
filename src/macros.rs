@@ -46,7 +46,6 @@ macro_rules! itry_opt {
 /// Macro for building Expressions
 macro_rules! expression {
     ($op:tt, ($($x:tt)+), ($($y:tt)+)) => {{
-        use $crate::tables::Table;
         $crate::expressions::Expression::BinaryOperator(
             $crate::operators::BinaryBuiltins.get($op).unwrap(),
             Box::new((expression!($($x)+), expression!($($y)+))),
@@ -56,7 +55,6 @@ macro_rules! expression {
         expression!($op, ($($x)+), ($y))
     };
     ($op:tt, ($($x:tt)+)) => {{
-        use $crate::tables::Table;
         $crate::expressions::Expression::UnaryOperator(
             $crate::operators::UnaryBuiltins.get($op).unwrap(),
             Box::new(expression!($($x)+)),

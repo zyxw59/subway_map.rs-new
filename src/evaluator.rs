@@ -5,13 +5,18 @@ use crate::error::{EvaluatorError, MathError, Result as EResult};
 use crate::expressions::{Function, Variable};
 use crate::points::PointCollection;
 use crate::statement::{PointStatement, Statement, StatementKind};
-use crate::tables::TableMut;
 use crate::values::{Point, Value};
 
+pub trait EvaluationContext {
+    fn get_variable(&self, name: &str) -> Option<Value>;
+
+    fn get_function(&self, name: &str) -> Option<&Function>;
+}
+
 #[derive(Default)]
-pub struct Evaluator<V = HashMap<Variable, Value>, F = HashMap<Variable, Function>> {
-    variables: V,
-    functions: F,
+pub struct Evaluator {
+    variables: HashMap<Variable, Value>,
+    functions: HashMap<Variable, Function>,
     points: PointCollection,
 }
 
@@ -23,13 +28,7 @@ impl Evaluator {
             points: PointCollection::new(),
         }
     }
-}
 
-impl<V, F> Evaluator<V, F>
-where
-    V: TableMut<Variable, Value>,
-    F: TableMut<Variable, Function>,
-{
     fn evaluate_all(&mut self, parser: impl Iterator<Item = EResult<Statement>>) -> EResult<()> {
         for statement in parser {
             self.evaluate(statement?)?;
@@ -42,7 +41,7 @@ where
             StatementKind::Null => {}
             StatementKind::Variable(name, expr) => {
                 let value = expr
-                    .evaluate(&self.variables, &self.functions)
+                    .evaluate(self)
                     .map_err(|err| EvaluatorError::Math(err, line))?;
                 self.variables.insert(name, value);
             }
@@ -55,7 +54,7 @@ where
                     return Err(EvaluatorError::PointRedefinition(name, line, original_line).into());
                 }
                 let value = expr
-                    .evaluate(&self.variables, &self.functions)
+                    .evaluate(self)
                     .and_then(Point::try_from)
                     .map_err(|err| EvaluatorError::Math(err, line))?;
                 self.variables.insert(name.clone(), value.into());
@@ -67,7 +66,7 @@ where
                 points,
             }) => {
                 let spacing = spaced
-                    .evaluate(&self.variables, &self.functions)
+                    .evaluate(self)
                     .and_then(Point::try_from)
                     .map_err(|err| EvaluatorError::Math(err, line))?;
                 let from_point = if let Some(from_point) = self.points.get_point(&from) {
@@ -85,7 +84,7 @@ where
                         );
                     }
                     distance += if let Some(expr) = multiplier {
-                        expr.evaluate(&self.variables, &self.functions)
+                        expr.evaluate(self)
                             .and_then(f64::try_from)
                             .map_err(|err| EvaluatorError::Math(err, line))?
                     } else {
@@ -102,6 +101,29 @@ where
             }
         }
         Ok(())
+    }
+}
+
+impl EvaluationContext for Evaluator {
+    fn get_variable(&self, name: &str) -> Option<Value> {
+        self.variables
+            .get(name)
+            .copied()
+            .or_else(|| self.points.get_point(name).map(Value::from))
+    }
+
+    fn get_function(&self, name: &str) -> Option<&Function> {
+        self.functions.get(name)
+    }
+}
+
+impl EvaluationContext for () {
+    fn get_variable(&self, _name: &str) -> Option<Value> {
+        None
+    }
+
+    fn get_function(&self, _name: &str) -> Option<&Function> {
+        None
     }
 }
 

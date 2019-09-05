@@ -6,7 +6,6 @@ use crate::expressions::{Expression, Function, Variable};
 use crate::lexer::Token;
 use crate::operators::{BinaryBuiltins, UnaryBuiltins};
 use crate::statement::{Label, PointStatement, Segment, Statement, StatementKind};
-use crate::tables::Table;
 use crate::values::Value;
 
 pub trait LexerExt: Iterator<Item = EResult<Token>> {
