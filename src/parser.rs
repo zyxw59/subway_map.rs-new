@@ -223,6 +223,10 @@ where
             match try_opt!(self.next()) {
                 None => break,
                 Some(Token::Comma) => continue,
+                Some(Token::Semicolon) => {
+                    self.put_back(Token::Semicolon);
+                    break;
+                }
                 Some(tok) => Err(ParserError::Token(tok, self.line()))?,
             }
         }

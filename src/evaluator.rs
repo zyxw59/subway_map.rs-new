@@ -176,4 +176,23 @@ mod tests {
         assert_eq!(evaluator.variables.get("a"), Some(&Value::Point(1.0, 1.0)));
         assert_eq!(evaluator.points.get_point("a"), Some(Point(1.0, 1.0)));
     }
+
+    #[test]
+    fn points_spaced() {
+        let parser = Lexer::new(
+            "point a = (1, 1); points from a spaced (1, 1): (0.5) c, d, (0.5) e;".as_bytes(),
+        )
+        .into_parser();
+        let mut evaluator = Evaluator::new();
+        evaluator.evaluate_all(parser).unwrap();
+        assert_eq!(
+            evaluator.points.get_points_of_line("a", "e"),
+            Some(vec![
+                Point(1.0, 1.0),
+                Point(1.5, 1.5),
+                Point(2.5, 2.5),
+                Point(3.0, 3.0)
+            ])
+        );
+    }
 }

@@ -41,6 +41,28 @@ impl PointCollection {
         id
     }
 
+    /// Returns a vector of the points of the line, in the same order as the specified points.
+    #[cfg(test)]
+    pub fn get_points_of_line<'s>(&'s self, p1: &str, p2: &str) -> Option<Vec<Point>> {
+        let p1 = self.get_point_info(p1)?;
+        let p2 = self.get_point_info(p2)?;
+        let line = self
+            .pairs
+            .get(&(p1.id, p2.id))
+            .and_then(|&id| self.lines.get(id))?;
+        if line.distance(p1.value) < line.distance(p2.value) {
+            Some(line.points.iter().map(|p| line.point(p.distance)).collect())
+        } else {
+            Some(
+                line.points
+                    .iter()
+                    .rev()
+                    .map(|p| line.point(p.distance))
+                    .collect(),
+            )
+        }
+    }
+
     pub fn insert_point(&mut self, name: Variable, value: Point, line_number: usize) {
         self.insert_point_get_id(name, value, line_number);
     }
@@ -67,15 +89,18 @@ impl PointCollection {
             direction,
             points: Vec::new(),
         };
-        line.points.push((start_id, 0.0));
+        line.points.push(LinePoint {
+            id: start_id,
+            distance: 0.0,
+        });
         line.points
             .extend(points.into_iter().map(|(name, distance)| {
                 let point = distance * direction + origin;
-                let point_id = self.insert_point_get_id(name, point, line_number);
-                (point_id, distance)
+                let id = self.insert_point_get_id(name, point, line_number);
+                LinePoint { id, distance }
             }));
-        for (&(p1, _), &(p2, _)) in line.points.iter().tuple_combinations() {
-            self.add_pair(p1, p2, line_id);
+        for (&p1, &p2) in line.points.iter().tuple_combinations() {
+            self.add_pair(p1.id, p2.id, line_id);
         }
         self.lines.push(line);
     }
@@ -106,7 +131,28 @@ type PointId = usize;
 struct Line {
     direction: Point,
     origin: Point,
-    points: Vec<(PointId, f64)>,
+    points: Vec<LinePoint>,
+}
+
+impl Line {
+    /// Calculate the distance along the line for the specified point.
+    pub fn distance(&self, p: Point) -> f64 {
+        // vector from origin
+        let v = p - self.origin;
+        // $ v \cdot d / |d| $
+        v * self.direction / self.direction.norm()
+    }
+
+    /// Calculate the location of a point a given distance along the line.
+    pub fn point(&self, distance: f64) -> Point {
+        distance * self.direction + self.origin
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+struct LinePoint {
+    distance: f64,
+    id: PointId,
 }
 
 type LineId = usize;

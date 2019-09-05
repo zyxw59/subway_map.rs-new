@@ -31,6 +31,12 @@ macro_rules! numeric_fn {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Point(pub f64, pub f64);
 
+impl Point {
+    pub fn norm(self) -> f64 {
+        (self * self).sqrt()
+    }
+}
+
 impl ops::Add for Point {
     type Output = Point;
 
@@ -39,11 +45,43 @@ impl ops::Add for Point {
     }
 }
 
+impl ops::Sub for Point {
+    type Output = Point;
+
+    fn sub(self, other: Point) -> Point {
+        Point(self.0 - other.0, self.1 - other.1)
+    }
+}
+
+impl ops::Mul for Point {
+    type Output = f64;
+
+    fn mul(self, other: Point) -> f64 {
+        self.0 * other.0 + self.1 * other.1
+    }
+}
+
+impl ops::Mul<f64> for Point {
+    type Output = Point;
+
+    fn mul(self, other: f64) -> Point {
+        Point(self.0 * other, self.1 * other)
+    }
+}
+
 impl ops::Mul<Point> for f64 {
     type Output = Point;
 
     fn mul(self, other: Point) -> Point {
         Point(self * other.0, self * other.1)
+    }
+}
+
+impl ops::Div<f64> for Point {
+    type Output = Point;
+
+    fn div(self, other: f64) -> Point {
+        Point(self.0 / other, self.1 / other)
     }
 }
 
