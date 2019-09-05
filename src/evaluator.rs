@@ -75,7 +75,7 @@ impl Evaluator {
                     return Err(EvaluatorError::Math(MathError::Variable(from), line).into());
                 };
                 let mut distance = 0.0;
-                let mut new_points = Vec::new();
+                let mut distances = Vec::new();
                 for (multiplier, name) in points {
                     // check for redefinition of point
                     if let Some(original_line) = self.points.get_point_line_number(&name) {
@@ -92,9 +92,9 @@ impl Evaluator {
                     };
                     let point = from_point + distance * spacing;
                     self.variables.insert(name.clone(), point.into());
-                    new_points.push((name, point));
+                    distances.push((name, distance));
                 }
-                self.points.new_line(from, new_points, line);
+                self.points.new_line(from, spacing, distances, line);
             }
             _ => {
                 unimplemented!();

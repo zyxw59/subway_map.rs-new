@@ -55,22 +55,29 @@ impl PointCollection {
     pub fn new_line(
         &mut self,
         start_point: Variable,
-        points: impl IntoIterator<Item = (Variable, Point)>,
+        direction: Point,
+        points: impl IntoIterator<Item = (Variable, f64)>,
         line_number: usize,
     ) {
         let line_id = self.lines.len();
-        let mut line = Line::default();
         let start_id = *self.point_ids.get(&start_point).unwrap();
-        line.points.push(start_id);
-        line.points.extend(
-            points
-                .into_iter()
-                .map(|(name, point)| self.insert_point_get_id(name, point, line_number)),
-        );
-        for (&p1, &p2) in line.points.iter().tuple_combinations() {
+        let origin = self.points[start_id].value;
+        let mut line = Line {
+            origin,
+            direction,
+            points: Vec::new(),
+        };
+        line.points.push((start_id, 0.0));
+        line.points
+            .extend(points.into_iter().map(|(name, distance)| {
+                let point = distance * direction + origin;
+                let point_id = self.insert_point_get_id(name, point, line_number);
+                (point_id, distance)
+            }));
+        for (&(p1, _), &(p2, _)) in line.points.iter().tuple_combinations() {
             self.add_pair(p1, p2, line_id);
         }
-        unimplemented!();
+        self.lines.push(line);
     }
 }
 
@@ -95,9 +102,11 @@ impl PointInfo {
 
 type PointId = usize;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct Line {
-    points: Vec<PointId>,
+    direction: Point,
+    origin: Point,
+    points: Vec<(PointId, f64)>,
 }
 
 type LineId = usize;
