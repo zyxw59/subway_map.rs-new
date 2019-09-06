@@ -69,12 +69,10 @@ impl Evaluator {
                     .evaluate(self)
                     .and_then(Point::try_from)
                     .map_err(|err| EvaluatorError::Math(err, line))?;
-                let from_point = if let Some(from_point) = self.points.get_point(&from) {
-                    from_point
-                } else {
+                if !self.points.contains(&from) {
                     return Err(EvaluatorError::Math(MathError::Variable(from), line).into());
-                };
-                let mut distance = 0.0;
+                }
+                let mut total_distance = 0.0;
                 let mut distances = Vec::new();
                 for (multiplier, name) in points {
                     // check for redefinition of point
@@ -83,18 +81,52 @@ impl Evaluator {
                             EvaluatorError::PointRedefinition(name, line, original_line).into()
                         );
                     }
-                    distance += if let Some(expr) = multiplier {
-                        expr.evaluate(self)
-                            .and_then(f64::try_from)
-                            .map_err(|err| EvaluatorError::Math(err, line))?
-                    } else {
-                        1.0
-                    };
-                    let point = from_point + distance * spacing;
-                    self.variables.insert(name.clone(), point.into());
-                    distances.push((name, distance));
+                    total_distance += multiplier
+                        .map(|expr| expr.evaluate(self).and_then(f64::try_from))
+                        .unwrap_or(Ok(1.0))
+                        .map_err(|err| EvaluatorError::Math(err, line))?;
+                    distances.push((name, total_distance));
                 }
                 self.points.new_line(from, spacing, distances, line);
+            }
+            StatementKind::Point(PointStatement::Between {
+                from,
+                to: (to_multiplier, to),
+                points,
+            }) => {
+                if !self.points.contains(&from) {
+                    return Err(EvaluatorError::Math(MathError::Variable(from), line).into());
+                }
+                if !self.points.contains(&to) {
+                    return Err(EvaluatorError::Math(MathError::Variable(to), line).into());
+                }
+                let mut total_distance = 0.0;
+                let mut distances = Vec::new();
+                for (multiplier, name) in points {
+                    // check for redefinition of point
+                    if let Some(original_line) = self.points.get_point_line_number(&name) {
+                        return Err(
+                            EvaluatorError::PointRedefinition(name, line, original_line).into()
+                        );
+                    }
+                    total_distance += multiplier
+                        .map(|expr| expr.evaluate(self).and_then(f64::try_from))
+                        .unwrap_or(Ok(1.0))
+                        .map_err(|err| EvaluatorError::Math(err, line))?;
+                    distances.push((name, total_distance));
+                }
+                total_distance += to_multiplier
+                    .map(|expr| expr.evaluate(self).and_then(f64::try_from))
+                    .unwrap_or(Ok(1.0))
+                    .map_err(|err| EvaluatorError::Math(err, line))?;
+                self.points.extend_line(
+                    from,
+                    to,
+                    distances
+                        .into_iter()
+                        .map(|(name, distance)| (name, distance / total_distance)),
+                    line,
+                );
             }
             _ => {
                 unimplemented!();
@@ -192,6 +224,27 @@ mod tests {
                 Point(1.5, 1.5),
                 Point(2.5, 2.5),
                 Point(3.0, 3.0)
+            ])
+        );
+    }
+
+    #[test]
+    fn points_between() {
+        let parser = Lexer::new(
+            "point a = (1, 1); point e = (4, 4); points from a to (0.5) e: (0.5) b, c, d;"
+                .as_bytes(),
+        )
+        .into_parser();
+        let mut evaluator = Evaluator::new();
+        evaluator.evaluate_all(parser).unwrap();
+        assert_eq!(
+            evaluator.points.get_points_of_line("a", "e"),
+            Some(vec![
+                Point(1.0, 1.0),
+                Point(1.5, 1.5),
+                Point(2.5, 2.5),
+                Point(3.5, 3.5),
+                Point(4.0, 4.0)
             ])
         );
     }

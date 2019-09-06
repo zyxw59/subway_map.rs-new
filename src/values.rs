@@ -33,7 +33,11 @@ pub struct Point(pub f64, pub f64);
 
 impl Point {
     pub fn norm(self) -> f64 {
-        (self * self).sqrt()
+        self.norm2().sqrt()
+    }
+
+    pub fn norm2(self) -> f64 {
+        self * self
     }
 }
 
