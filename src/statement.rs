@@ -20,8 +20,20 @@ pub enum StatementKind {
     Function(Variable, Function),
     /// A variable assignment.
     Variable(Variable, Expression),
-    /// A declaration of one or more points.
-    Point(PointStatement),
+    /// A declaration of a single point.
+    PointSingle(Variable, Expression),
+    /// A declaration of a sequence of points, using the `from` ... `spaced` syntax.
+    PointSpaced {
+        from: Variable,
+        spaced: Expression,
+        points: Vec<(Option<Expression>, Variable)>,
+    },
+    /// A declaration of a sequence of points, using the `from` ... `to` syntax.
+    PointBetween {
+        from: Variable,
+        to: (Option<Expression>, Variable),
+        points: Vec<(Option<Expression>, Variable)>,
+    },
     /// A declaration of a line.
     Line {
         /// The name of the line
@@ -41,25 +53,6 @@ pub enum StatementKind {
         lines: Option<Vec<Variable>>,
         /// The label.
         label: Option<Label>,
-    },
-}
-
-/// A statement declaring one or more points.
-#[derive(Clone, Debug, PartialEq)]
-pub enum PointStatement {
-    /// A declaration of a single point.
-    Single(Variable, Expression),
-    /// A declaration of a sequence of points, using the `from` ... `spaced` syntax.
-    Spaced {
-        from: Variable,
-        spaced: Expression,
-        points: Vec<(Option<Expression>, Variable)>,
-    },
-    /// A declaration of a sequence of points, using the `from` ... `to` syntax.
-    Between {
-        from: Variable,
-        to: (Option<Expression>, Variable),
-        points: Vec<(Option<Expression>, Variable)>,
     },
 }
 

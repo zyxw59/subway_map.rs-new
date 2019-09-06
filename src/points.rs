@@ -34,10 +34,17 @@ impl PointCollection {
         self.get_point_info(k).map(|info| info.line_number)
     }
 
-    fn insert_point_get_id(&mut self, name: Variable, value: Point, line_number: usize) -> PointId {
-        let id = self.points.len();
-        self.points.push(PointInfo::new(value, id, line_number));
-        self.point_ids.insert(name, id);
+    /// This is an associated function so that it can work with partial borrows of `self`
+    fn insert_point_get_id(
+        points: &mut Vec<PointInfo>,
+        point_ids: &mut HashMap<Variable, PointId>,
+        name: Variable,
+        value: Point,
+        line_number: usize,
+    ) -> PointId {
+        let id = points.len();
+        points.push(PointInfo::new(value, id, line_number));
+        point_ids.insert(name, id);
         id
     }
 
@@ -93,7 +100,13 @@ impl PointCollection {
     }
 
     pub fn insert_point(&mut self, name: Variable, value: Point, line_number: usize) {
-        self.insert_point_get_id(name, value, line_number);
+        Self::insert_point_get_id(
+            &mut self.points,
+            &mut self.point_ids,
+            name,
+            value,
+            line_number,
+        );
     }
 
     fn add_pair(&mut self, p1: PointId, p2: PointId, line: LineId) {
@@ -125,7 +138,13 @@ impl PointCollection {
         line.points
             .extend(points.into_iter().map(|(name, distance)| {
                 let point = distance * direction + origin;
-                let id = self.insert_point_get_id(name, point, line_number);
+                let id = Self::insert_point_get_id(
+                    &mut self.points,
+                    &mut self.point_ids,
+                    name,
+                    point,
+                    line_number,
+                );
                 LinePoint { id, distance }
             }));
         for (&p1, &p2) in line.points.iter().tuple_combinations() {
@@ -151,29 +170,31 @@ impl PointCollection {
         let direction = end - start;
         let (start_distance, distance_scale) = {
             let line = &self.lines[line_id];
-            (
-                line.distance(start),
-                line.distance(end) - line.distance(start),
-            )
+            (line.distance(start), line.relative_distance(start, end))
         };
-        let mut new_points = Vec::new();
-        for (name, distance) in points {
-            let id = self.insert_point_get_id(name, distance * direction + start, line_number);
-            new_points.push(LinePoint {
-                id,
-                distance: distance * distance_scale + start_distance,
-            });
-        }
-        let points = self.lines[line_id]
-            .points
-            .iter()
-            .merge(new_points.iter())
-            .copied()
+        let self_points = &mut self.points;
+        let self_point_ids = &mut self.point_ids;
+        let new_points = points
+            .into_iter()
+            .map(|(name, distance)| {
+                let id = Self::insert_point_get_id(
+                    self_points,
+                    self_point_ids,
+                    name,
+                    distance * direction + start,
+                    line_number,
+                );
+                LinePoint {
+                    id,
+                    distance: distance * distance_scale + start_distance,
+                }
+            })
+            .merge(self.lines[line_id].points.iter().copied())
             .collect::<Vec<_>>();
-        for (&p1, &p2) in points.iter().tuple_combinations() {
+        for (&p1, &p2) in new_points.iter().tuple_combinations() {
             self.add_pair(p1.id, p2.id, line_id);
         }
-        self.lines[line_id].points = points;
+        self.lines[line_id].points = new_points;
     }
 }
 

@@ -5,7 +5,7 @@ use crate::error::{ParserError, Result as EResult};
 use crate::expressions::{Expression, Function, Variable};
 use crate::lexer::Token;
 use crate::operators::{BinaryBuiltins, UnaryBuiltins};
-use crate::statement::{Label, PointStatement, Segment, Statement, StatementKind};
+use crate::statement::{Label, Segment, Statement, StatementKind};
 use crate::values::Value;
 
 pub trait LexerExt: Iterator<Item = EResult<Token>> {
@@ -271,9 +271,7 @@ where
                         let name = expect!(self, Token::Tag(tag) => tag);
                         expect!(self, Token::Equal);
                         let expr = self.parse_expression(0)?;
-                        Ok(Some(StatementKind::Point(PointStatement::Single(
-                            name, expr,
-                        ))))
+                        Ok(Some(StatementKind::PointSingle(name, expr)))
                     }
                     // sequence of points
                     "points" => {
@@ -286,11 +284,11 @@ where
                                 let spaced = self.parse_expression(0)?;
                                 expect!(self, Token::Tag(ref tag) if tag == ":");
                                 let points = self.parse_comma_point_list()?;
-                                Ok(Some(StatementKind::Point(PointStatement::Spaced {
+                                Ok(Some(StatementKind::PointSpaced {
                                     from,
                                     spaced,
                                     points,
-                                })))
+                                }))
                             }
                             // from ... to
                             "to" => {
@@ -306,11 +304,7 @@ where
                                 );
                                 expect!(self, Token::Tag(ref tag) if tag == ":");
                                 let points = self.parse_comma_point_list()?;
-                                Ok(Some(StatementKind::Point(PointStatement::Between {
-                                    from,
-                                    to,
-                                    points,
-                                })))
+                                Ok(Some(StatementKind::PointBetween { from, to, points }))
                             }
                             _ => Err(ParserError::Token(Token::Tag(tag), self.line()))?,
                         }
@@ -420,7 +414,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::lexer::Lexer;
-    use crate::statement::{Label, LabelPosition, PointStatement, StatementKind};
+    use crate::statement::{Label, LabelPosition, StatementKind};
 
     use super::LexerExt;
 
@@ -527,7 +521,7 @@ mod tests {
     fn point_single() {
         assert_statement!(
             "point a = b",
-            StatementKind::Point(PointStatement::Single("a".to_string(), expression!(#"b")))
+            StatementKind::PointSingle("a".to_string(), expression!(#"b"))
         );
     }
 
@@ -535,7 +529,7 @@ mod tests {
     fn points_spaced() {
         assert_statement!(
             "points from a spaced x: (1/2) b, c, (1/2) d",
-            StatementKind::Point(PointStatement::Spaced {
+            StatementKind::PointSpaced {
                 from: "a".to_string(),
                 spaced: expression!(#"x"),
                 points: vec![
@@ -543,7 +537,7 @@ mod tests {
                     (None, "c".to_string()),
                     (Some(expression!("/", 1, 2)), "d".to_string()),
                 ],
-            })
+            }
         );
     }
 
@@ -551,14 +545,14 @@ mod tests {
     fn points_between() {
         assert_statement!(
             "points from a to (1/2) d: (1/2) b, c",
-            StatementKind::Point(PointStatement::Between {
+            StatementKind::PointBetween {
                 from: "a".to_string(),
                 to: (Some(expression!("/", 1, 2)), "d".to_string()),
                 points: vec![
                     (Some(expression!("/", 1, 2)), "b".to_string()),
                     (None, "c".to_string()),
                 ],
-            })
+            }
         );
     }
 

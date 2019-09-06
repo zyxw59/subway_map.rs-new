@@ -4,7 +4,7 @@ use std::convert::TryFrom;
 use crate::error::{EvaluatorError, MathError, Result as EResult};
 use crate::expressions::{Function, Variable};
 use crate::points::PointCollection;
-use crate::statement::{PointStatement, Statement, StatementKind};
+use crate::statement::{Statement, StatementKind};
 use crate::values::{Point, Value};
 
 pub trait EvaluationContext {
@@ -48,7 +48,7 @@ impl Evaluator {
             StatementKind::Function(name, function) => {
                 self.functions.insert(name, function);
             }
-            StatementKind::Point(PointStatement::Single(name, expr)) => {
+            StatementKind::PointSingle(name, expr) => {
                 // points can't be redefined, since lines are defined in terms of them
                 if let Some(original_line) = self.points.get_point_line_number(&name) {
                     return Err(EvaluatorError::PointRedefinition(name, line, original_line).into());
@@ -59,11 +59,11 @@ impl Evaluator {
                     .map_err(|err| EvaluatorError::Math(err, line))?;
                 self.points.insert_point(name, value, line);
             }
-            StatementKind::Point(PointStatement::Spaced {
+            StatementKind::PointSpaced {
                 from,
                 spaced,
                 points,
-            }) => {
+            } => {
                 let spacing = spaced
                     .evaluate(self)
                     .and_then(Point::try_from)
@@ -88,11 +88,11 @@ impl Evaluator {
                 }
                 self.points.new_line(from, spacing, distances, line);
             }
-            StatementKind::Point(PointStatement::Between {
+            StatementKind::PointBetween {
                 from,
                 to: (to_multiplier, to),
                 points,
-            }) => {
+            } => {
                 if !self.points.contains(&from) {
                     return Err(EvaluatorError::Math(MathError::Variable(from), line).into());
                 }
