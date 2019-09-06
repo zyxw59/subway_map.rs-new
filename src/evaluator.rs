@@ -57,7 +57,6 @@ impl Evaluator {
                     .evaluate(self)
                     .and_then(Point::try_from)
                     .map_err(|err| EvaluatorError::Math(err, line))?;
-                self.variables.insert(name.clone(), value.into());
                 self.points.insert_point(name, value, line);
             }
             StatementKind::Point(PointStatement::Spaced {
@@ -165,7 +164,7 @@ mod tests {
     use crate::parser::LexerExt;
     use crate::values::{Point, Value};
 
-    use super::Evaluator;
+    use super::{EvaluationContext, Evaluator};
 
     #[test]
     fn variables_set() {
@@ -205,47 +204,73 @@ mod tests {
         let parser = Lexer::new("point a = (1, 1);".as_bytes()).into_parser();
         let mut evaluator = Evaluator::new();
         evaluator.evaluate_all(parser).unwrap();
-        assert_eq!(evaluator.variables.get("a"), Some(&Value::Point(1.0, 1.0)));
-        assert_eq!(evaluator.points.get_point("a"), Some(Point(1.0, 1.0)));
+        assert_eq!(evaluator.get_variable("a"), Some(Value::Point(1.0, 1.0)));
+    }
+
+    macro_rules! points_multiple {
+        ($str:expr,
+         $first:ident: ($first_x:expr, $first_y:expr),
+         $($name:ident: ($x:expr, $y:expr)),*;
+         $last:ident: ($last_x:expr, $last_y:expr)) => {
+            let parser = Lexer::new($str.as_bytes()).into_parser();
+            let mut evaluator = Evaluator::new();
+            evaluator.evaluate_all(parser).unwrap();
+            assert_eq!(
+                evaluator.points.get_points_of_line(stringify!($first), stringify!($last)),
+                Some(vec![
+                     Point($first_x as f64, $first_y as f64),
+                     $(Point($x as f64, $y as f64)),*,
+                     Point($last_x as f64, $last_y as f64)
+                ]),
+            );
+            for (name, value) in &[
+                 (stringify!($first), Value::Point($first_x as f64, $first_y as f64)),
+                 $((stringify!($name), Value::Point($x as f64, $y as f64))),*,
+                 (stringify!($last), Value::Point($last_x as f64, $last_y as f64)),
+            ] {
+                assert_eq!(evaluator.get_variable(name), Some(*value));
+            }
+        }
     }
 
     #[test]
     fn points_spaced() {
-        let parser = Lexer::new(
-            "point a = (1, 1); points from a spaced (1, 1): (0.5) c, d, (0.5) e;".as_bytes(),
-        )
-        .into_parser();
-        let mut evaluator = Evaluator::new();
-        evaluator.evaluate_all(parser).unwrap();
-        assert_eq!(
-            evaluator.points.get_points_of_line("a", "e"),
-            Some(vec![
-                Point(1.0, 1.0),
-                Point(1.5, 1.5),
-                Point(2.5, 2.5),
-                Point(3.0, 3.0)
-            ])
+        points_multiple!(
+            "point a = (1, 1); points from a spaced (1, 1): (0.5) b, c, d, (0.5) e;",
+            a: (1, 1),
+            b: (1.5, 1.5),
+            c: (2.5, 2.5),
+            d: (3.5, 3.5);
+            e: (4, 4)
         );
     }
 
     #[test]
     fn points_between() {
-        let parser = Lexer::new(
-            "point a = (1, 1); point e = (4, 4); points from a to (0.5) e: (0.5) b, c, d;"
-                .as_bytes(),
-        )
-        .into_parser();
-        let mut evaluator = Evaluator::new();
-        evaluator.evaluate_all(parser).unwrap();
-        assert_eq!(
-            evaluator.points.get_points_of_line("a", "e"),
-            Some(vec![
-                Point(1.0, 1.0),
-                Point(1.5, 1.5),
-                Point(2.5, 2.5),
-                Point(3.5, 3.5),
-                Point(4.0, 4.0)
-            ])
+        points_multiple!(
+            "point a = (1, 1); point e = (4, 4); points from a to (0.5) e: (0.5) b, c, d;",
+            a: (1, 1),
+            b: (1.5, 1.5),
+            c: (2.5, 2.5),
+            d: (3.5, 3.5);
+            e: (4, 4)
+        );
+    }
+
+    #[test]
+    fn points_between_2() {
+        points_multiple!(
+            "point a = (1, 1);
+             point e = (4, 4);
+             points from a to (0.5) e: (0.5) b, c, d;
+             points from a to e: f, g;",
+            a: (1, 1),
+            b: (1.5, 1.5),
+            f: (2, 2),
+            c: (2.5, 2.5),
+            g: (3, 3),
+            d: (3.5, 3.5);
+            e: (4, 4)
         );
     }
 }

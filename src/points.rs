@@ -156,7 +156,6 @@ impl PointCollection {
                 line.distance(end) - line.distance(start),
             )
         };
-        dbg!(start_distance, distance_scale);
         let mut new_points = Vec::new();
         for (name, distance) in points {
             let id = self.insert_point_get_id(name, distance * direction + start, line_number);
