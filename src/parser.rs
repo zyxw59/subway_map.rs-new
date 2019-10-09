@@ -311,32 +311,28 @@ where
                     }
                     // line
                     "line" => {
-                        let tag = expect!(self, Token::Tag(tag) => tag);
-                        let style = if tag == "." {
-                            // next token is a style, then the line name will follow
-                            expect!(self, Token::Tag(tag) => Some(tag))
-                        } else {
-                            // no style, just a line name
-                            self.put_back(Token::Tag(tag));
-                            None
-                        };
-                        let name = expect!(self, Token::Tag(tag) => tag);
+                        let (name, style) = expect!(self,
+                            Token::Tag(name) => (name, None),
+                            Token::Dot(1) => {
+                                let style = expect!(self, Token::Tag(style) => Some(style));
+                                let name = expect!(self, Token::Tag(name) => name);
+                                (name, style)
+                            },
+                        );
                         expect!(self, Token::Tag(ref tag) if tag == ":");
                         let route = self.parse_route()?;
                         Ok(Some(StatementKind::Line { name, style, route }))
                     }
                     // stop
                     "stop" => {
-                        let tag = expect!(self, Token::Tag(tag) => tag);
-                        let style = if tag == "." {
-                            // next token is a style, then the line name will follow
-                            expect!(self, Token::Tag(tag) => Some(tag))
-                        } else {
-                            // no style, just a line name
-                            self.put_back(Token::Tag(tag));
-                            None
-                        };
-                        let point = expect!(self, Token::Tag(tag) => tag);
+                        let (point, style) = expect!(self,
+                            Token::Tag(point) => (point, None),
+                            Token::Dot(1) => {
+                                let style = expect!(self, Token::Tag(style) => Some(style));
+                                let point = expect!(self, Token::Tag(point) => point);
+                                (point, style)
+                            },
+                        );
                         expect!(self, Token::LeftParen);
                         let tag = expect!(self, Token::Tag(tag) => tag);
                         let lines = if tag == "all" {

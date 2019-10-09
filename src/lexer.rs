@@ -131,8 +131,37 @@ impl<R: BufRead> Lexer<R> {
 
     fn parse_dot(&mut self) -> EResult<Token> {
         match self.get_next_char().map(CharCat::from) {
+            // next char is a number, parse this dot as part of that number
             Some(CharCat::Number) => self.parse_number(),
-            _ => self.parse_other(CharCat::Dot),
+            // next char is a dot, parse this dot as part of a sequence of dots
+            Some(CharCat::Dot) => {
+                let mut n = 0;
+                // self.pos hasn't been moved yet, so the first `get` call gets the initial dot.
+                // this loop necessarily runs at least twice.
+                while let Some(c) = self.get()? {
+                    match CharCat::from(c) {
+                        // a dot? increment and continue
+                        CharCat::Dot => {
+                            self.pos += 1;
+                            n += 1;
+                        }
+                        // a number? rewind, the last dot should be parsed as part of that number
+                        CharCat::Number => {
+                            self.pos -= 1;
+                            n -= 1;
+                            break;
+                        }
+                        // something else? the dots have ended, we're done
+                        _ => break,
+                    }
+                }
+                Ok(Token::Dot(n))
+            }
+            // next char is something else, this is a solo dot
+            _ => {
+                self.pos += 1;
+                Ok(Token::Dot(1))
+            }
         }
     }
 
@@ -285,6 +314,8 @@ pub enum Token {
     Number(f64),
     /// A literal string
     String(String),
+    /// A sequence of one or more dots
+    Dot(usize),
     /// A left parenthesis
     LeftParen,
     /// A right parenthesis
@@ -342,7 +373,7 @@ mod tests {
                 Token::Tag("a".into()),
                 Token::Comma,
                 Token::Tag("b".into()),
-                Token::Tag(".".into()),
+                Token::Dot(1),
                 Token::Tag("c".into()),
                 Token::Number(0.123),
             ]
@@ -354,6 +385,21 @@ mod tests {
         let lexer = Lexer::new("1.1.1".as_bytes());
         let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(tokens, [Token::Number(1.1), Token::Number(0.1)]);
+    }
+
+    #[test]
+    fn dots() {
+        let lexer = Lexer::new("...5...a".as_bytes());
+        let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
+        assert_eq!(
+            tokens,
+            [
+                Token::Dot(2),
+                Token::Number(0.5),
+                Token::Dot(3),
+                Token::Tag("a".into())
+            ]
+        );
     }
 
     #[test]
