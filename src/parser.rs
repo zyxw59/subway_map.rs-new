@@ -100,6 +100,7 @@ where
             Some(Token::Tag(tag)) => match UnaryBuiltins.get(&tag) {
                 Some(op) => Ok(op.expression(self.parse_expression(op.precedence)?)),
                 None => {
+                    let tag = self.parse_dotted_ident(tag)?;
                     let next_tok = try_opt!(self.next());
                     if let Some(Token::LeftParen) = next_tok {
                         // function call
@@ -121,6 +122,20 @@ where
             },
             Some(tok) => Err(ParserError::Token(tok, self.line()))?,
         }
+    }
+
+    fn parse_dotted_ident(&mut self, tag: String) -> EResult<String> {
+        let mut arr = vec![tag];
+        while let Some(tok) = try_opt!(self.next()) {
+            match tok {
+                Token::Dot(1) => arr.push(expect!(self, Token::Tag(tag) => tag)),
+                _ => {
+                    self.put_back(tok);
+                    break;
+                }
+            }
+        }
+        Ok(arr.join("."))
     }
 
     fn parse_parentheses(&mut self) -> EResult<Expression> {
@@ -369,6 +384,7 @@ where
                     }
                     // other (variable assignment)
                     _ => {
+                        let tag = self.parse_dotted_ident(tag)?;
                         expect!(self, Token::Equal);
                         let expr = self.parse_expression(0)?;
                         Ok(Some(StatementKind::Variable(tag, expr)))
@@ -494,6 +510,11 @@ mod tests {
         assert_expression!("3*x", ("*", 3, (#"x")));
     }
 
+    #[test]
+    fn dotted_variable() {
+        assert_expression!("3*x.y", ("*", 3, (#"x.y")));
+    }
+
     macro_rules! assert_statement {
         ($text:expr, $statement:expr) => {{
             let result = Lexer::new($text.as_bytes())
@@ -510,6 +531,14 @@ mod tests {
         assert_statement!(
             "a = b",
             StatementKind::Variable("a".to_string(), expression!(#"b"))
+        );
+    }
+
+    #[test]
+    fn dotted_variable_assignment() {
+        assert_statement!(
+            "a.b = c",
+            StatementKind::Variable("a.b".to_string(), expression!(#"c"))
         );
     }
 
