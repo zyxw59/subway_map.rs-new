@@ -135,9 +135,9 @@ impl<R: BufRead> Lexer<R> {
             Some(CharCat::Number) => self.parse_number(),
             // next char is a dot, parse this dot as part of a sequence of dots
             Some(CharCat::Dot) => {
-                let mut n = 0;
-                // self.pos hasn't been moved yet, so the first `get` call gets the initial dot.
-                // this loop necessarily runs at least twice.
+                // we necessarily have at least two dots.
+                let mut n = 2;
+                self.pos += 2;
                 while let Some(c) = self.get()? {
                     match CharCat::from(c) {
                         // a dot? increment and continue
@@ -155,12 +155,12 @@ impl<R: BufRead> Lexer<R> {
                         _ => break,
                     }
                 }
-                Ok(Token::Dot(n))
+                Ok(Token::Tag(".".repeat(n)))
             }
             // next char is something else, this is a solo dot
             _ => {
                 self.pos += 1;
-                Ok(Token::Dot(1))
+                Ok(Token::Dot)
             }
         }
     }
@@ -314,8 +314,8 @@ pub enum Token {
     Number(f64),
     /// A literal string
     String(String),
-    /// A sequence of one or more dots
-    Dot(usize),
+    /// A single dot
+    Dot,
     /// A left parenthesis
     LeftParen,
     /// A right parenthesis
@@ -373,7 +373,7 @@ mod tests {
                 Token::Tag("a".into()),
                 Token::Comma,
                 Token::Tag("b".into()),
-                Token::Dot(1),
+                Token::Dot,
                 Token::Tag("c".into()),
                 Token::Number(0.123),
             ]
@@ -394,9 +394,9 @@ mod tests {
         assert_eq!(
             tokens,
             [
-                Token::Dot(2),
+                Token::Tag("..".into()),
                 Token::Number(0.5),
-                Token::Dot(3),
+                Token::Tag("...".into()),
                 Token::Tag("a".into())
             ]
         );

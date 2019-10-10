@@ -128,7 +128,7 @@ where
         let mut arr = vec![tag];
         while let Some(tok) = try_opt!(self.next()) {
             match tok {
-                Token::Dot(1) => arr.push(expect!(self, Token::Tag(tag) => tag)),
+                Token::Dot => arr.push(expect!(self, Token::Tag(tag) => tag)),
                 _ => {
                     self.put_back(tok);
                     break;
@@ -328,7 +328,7 @@ where
                     "line" => {
                         let (name, style) = expect!(self,
                             Token::Tag(name) => (name, None),
-                            Token::Dot(1) => {
+                            Token::Dot => {
                                 let style = expect!(self, Token::Tag(style) => Some(style));
                                 let name = expect!(self, Token::Tag(name) => name);
                                 (name, style)
@@ -342,7 +342,7 @@ where
                     "stop" => {
                         let (point, style) = expect!(self,
                             Token::Tag(point) => (point, None),
-                            Token::Dot(1) => {
+                            Token::Dot => {
                                 let style = expect!(self, Token::Tag(style) => Some(style));
                                 let point = expect!(self, Token::Tag(point) => point);
                                 (point, style)
