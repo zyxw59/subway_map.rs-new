@@ -34,14 +34,14 @@ pub enum StatementKind {
         to: (Option<Expression>, Variable),
         points: Vec<(Option<Expression>, Variable)>,
     },
-    /// A declaration of a line.
-    Line {
-        /// The name of the line
+    /// A declaration of a route.
+    Route {
+        /// The name of the route.
         name: Variable,
-        /// The style of the line
+        /// The style of the route.
         style: Option<Variable>,
-        /// The route of the line
-        route: Vec<Segment>,
+        /// The sequence of segments the route follows.
+        segments: Vec<Segment>,
     },
     /// A declaration of a stop.
     Stop {
@@ -49,8 +49,8 @@ pub enum StatementKind {
         point: Variable,
         /// The style of the stop.
         style: Option<Variable>,
-        /// The set of lines which stop at the stop, or `None` if all lines stop.
-        lines: Option<Vec<Variable>>,
+        /// The set of routes which stop at the stop, or `None` if all lines stop.
+        routes: Option<Vec<Variable>>,
         /// The label.
         label: Option<Label>,
     },

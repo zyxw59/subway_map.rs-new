@@ -324,8 +324,8 @@ where
                             _ => Err(ParserError::Token(Token::Tag(tag), self.line()))?,
                         }
                     }
-                    // line
-                    "line" => {
+                    // route
+                    "route" => {
                         let (name, style) = expect!(self,
                             Token::Tag(name) => (name, None),
                             Token::Dot => {
@@ -335,8 +335,12 @@ where
                             },
                         );
                         expect!(self, Token::Tag(ref tag) if tag == ":");
-                        let route = self.parse_route()?;
-                        Ok(Some(StatementKind::Line { name, style, route }))
+                        let segments = self.parse_route()?;
+                        Ok(Some(StatementKind::Route {
+                            name,
+                            style,
+                            segments,
+                        }))
                     }
                     // stop
                     "stop" => {
@@ -350,17 +354,17 @@ where
                         );
                         expect!(self, Token::LeftParen);
                         let tag = expect!(self, Token::Tag(tag) => tag);
-                        let lines = if tag == "all" {
+                        let routes = if tag == "all" {
                             expect!(self, Token::RightParen);
                             None
                         } else {
                             self.put_back(Token::Tag(tag));
-                            let mut lines = Vec::new();
+                            let mut routes = Vec::new();
                             loop {
-                                expect!(self, Token::Tag(tag) => lines.push(tag));
+                                expect!(self, Token::Tag(tag) => routes.push(tag));
                                 expect!(self, Token::RightParen => break, Token::Comma => {});
                             }
-                            Some(lines)
+                            Some(routes)
                         };
                         let label = expect!(self,
                             Token::String(text) => {
@@ -378,7 +382,7 @@ where
                         Ok(Some(StatementKind::Stop {
                             point,
                             style,
-                            lines,
+                            routes,
                             label,
                         }))
                     }
@@ -582,25 +586,25 @@ mod tests {
     }
 
     #[test]
-    fn line() {
+    fn route() {
         assert_statement!(
-            "line red: a --(1) b --(1) c",
-            StatementKind::Line {
+            "route red: a --(1) b --(1) c",
+            StatementKind::Route {
                 style: None,
                 name: "red".to_string(),
-                route: vec![segment!("a", "b", 1), segment!("b", "c", 1),],
+                segments: vec![segment!("a", "b", 1), segment!("b", "c", 1),],
             }
         )
     }
 
     #[test]
-    fn line_with_style() {
+    fn route_with_style() {
         assert_statement!(
-            "line.narrow red: a --(1) b --(1) c",
-            StatementKind::Line {
+            "route.narrow red: a --(1) b --(1) c",
+            StatementKind::Route {
                 style: Some("narrow".to_string()),
                 name: "red".to_string(),
-                route: vec![segment!("a", "b", 1), segment!("b", "c", 1),],
+                segments: vec![segment!("a", "b", 1), segment!("b", "c", 1),],
             }
         )
     }
@@ -612,7 +616,7 @@ mod tests {
             StatementKind::Stop {
                 style: None,
                 point: "a".to_string(),
-                lines: None,
+                routes: None,
                 label: Some(Label {
                     text: "A".to_string(),
                     position: LabelPosition::Above,
@@ -628,7 +632,7 @@ mod tests {
             StatementKind::Stop {
                 style: Some("terminus".to_string()),
                 point: "a".to_string(),
-                lines: None,
+                routes: None,
                 label: Some(Label {
                     text: "A".to_string(),
                     position: LabelPosition::End,
@@ -638,13 +642,13 @@ mod tests {
     }
 
     #[test]
-    fn stop_with_lines() {
+    fn stop_with_routes() {
         assert_statement!(
             r#"stop a (red, blue) "A" above"#,
             StatementKind::Stop {
                 style: None,
                 point: "a".to_string(),
-                lines: Some(vec!["red".to_string(), "blue".to_string()]),
+                routes: Some(vec!["red".to_string(), "blue".to_string()]),
                 label: Some(Label {
                     text: "A".to_string(),
                     position: LabelPosition::Above,
@@ -660,7 +664,7 @@ mod tests {
             StatementKind::Stop {
                 style: None,
                 point: "a".to_string(),
-                lines: None,
+                routes: None,
                 label: None,
             }
         )
