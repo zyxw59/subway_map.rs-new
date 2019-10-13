@@ -349,7 +349,7 @@ impl Token {
 
 #[cfg(test)]
 mod tests {
-    use super::{Lexer, Token};
+    use super::Lexer;
 
     #[test]
     fn all_whitespace() {
@@ -370,12 +370,12 @@ mod tests {
         assert_eq!(
             tokens,
             [
-                Token::Tag("a".into()),
-                Token::Comma,
-                Token::Tag("b".into()),
-                Token::Dot,
-                Token::Tag("c".into()),
-                Token::Number(0.123),
+                token!(#"a"),
+                token!(,),
+                token!(#"b"),
+                token!(.),
+                token!(#"c"),
+                token!(0.123)
             ]
         );
     }
@@ -384,7 +384,7 @@ mod tests {
     fn number_dot() {
         let lexer = Lexer::new("1.1.1".as_bytes());
         let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(tokens, [Token::Number(1.1), Token::Number(0.1)]);
+        assert_eq!(tokens, [token!(1.1), token!(0.1)]);
     }
 
     #[test]
@@ -393,12 +393,7 @@ mod tests {
         let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
         assert_eq!(
             tokens,
-            [
-                Token::Tag("..".into()),
-                Token::Number(0.5),
-                Token::Tag("...".into()),
-                Token::Tag("a".into())
-            ]
+            [token!(#".."), token!(0.5), token!(#"..."), token!(#"a")]
         );
     }
 
@@ -406,10 +401,7 @@ mod tests {
     fn strings() {
         let lexer = Lexer::new(r#""abc" "\"\\""#.as_bytes());
         let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(
-            tokens,
-            [Token::String("abc".into()), Token::String(r#""\"#.into())]
-        );
+        assert_eq!(tokens, [token!(@"abc"), token!(@r#""\"#)]);
     }
 
     #[test]
@@ -428,30 +420,20 @@ mod tests {
     fn string_multiline() {
         let lexer = Lexer::new("\"foo\nbar\"".as_bytes());
         let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(tokens, [Token::String("foo\nbar".into())]);
+        assert_eq!(tokens, [token!(@"foo\nbar")]);
     }
 
     #[test]
     fn equal() {
         let lexer = Lexer::new("a=b".as_bytes());
         let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(
-            tokens,
-            [Token::Tag("a".into()), Token::Equal, Token::Tag("b".into())]
-        );
+        assert_eq!(tokens, [token!(#"a"), token!(=), token!(#"b")]);
     }
 
     #[test]
     fn equal_2() {
         let lexer = Lexer::new("a==b".as_bytes());
         let tokens = lexer.collect::<Result<Vec<_>, _>>().unwrap();
-        assert_eq!(
-            tokens,
-            [
-                Token::Tag("a".into()),
-                Token::Tag("==".into()),
-                Token::Tag("b".into())
-            ]
-        );
+        assert_eq!(tokens, [token!(#"a"), token!(#"=="), token!(#"b")]);
     }
 }

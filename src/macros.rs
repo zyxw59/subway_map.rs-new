@@ -43,6 +43,37 @@ macro_rules! itry_opt {
 }
 
 #[cfg(test)]
+macro_rules! token {
+    (.) => {
+        $crate::lexer::Token::Dot
+    };
+    ((l)) => {
+        $crate::lexer::Token::LeftParen
+    };
+    ((r)) => {
+        $crate::lexer::Token::RightParen
+    };
+    (,) => {
+        $crate::lexer::Token::Comma
+    };
+    (;) => {
+        $crate::lexer::Token::Semicolon
+    };
+    (=) => {
+        $crate::lexer::Token::Equal
+    };
+    (#$tag:expr) => {
+        $crate::lexer::Token::Tag(String::from($tag))
+    };
+    ($value:expr) => {
+        $crate::lexer::Token::Number($value as f64)
+    };
+    (@$str:expr) => {
+        $crate::lexer::Token::String(String::from($str))
+    };
+}
+
+#[cfg(test)]
 /// Macro for building Expressions
 macro_rules! expression {
     ($op:tt, ($($x:tt)+), ($($y:tt)+)) => {{
