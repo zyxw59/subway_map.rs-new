@@ -253,13 +253,13 @@ where
         let mut start = expect!(self, Token::Tag(tag) => tag);
         while let Some(tok) = try_opt!(self.next()) {
             self.put_back(tok);
-            expect!(self,
+            expect! { self,
                 Token::Tag(ref tag) if tag == "--" => {},
                 Token::Semicolon => {
                     self.put_back(Token::Semicolon);
                     break
                 },
-            );
+            };
             expect!(self, Token::LeftParen);
             let offset = self.parse_expression(0)?;
             expect!(self, Token::RightParen);
@@ -289,51 +289,17 @@ where
                         Ok(Some(StatementKind::PointSingle(name, expr)))
                     }
                     // sequence of points
-                    "points" => {
-                        expect!(self, Token::Tag(ref tag) if tag == "from");
-                        let from = expect!(self, Token::Tag(tag) => tag);
-                        let kind = expect!(self, Token::Tag(tag) => tag);
-                        match kind.as_ref() {
-                            // from ... spaced
-                            "spaced" => {
-                                let spaced = self.parse_expression(0)?;
-                                expect!(self, Token::Tag(ref tag) if tag == ":");
-                                let points = self.parse_comma_point_list()?;
-                                Ok(Some(StatementKind::PointSpaced {
-                                    from,
-                                    spaced,
-                                    points,
-                                }))
-                            }
-                            // from ... to
-                            "to" => {
-                                let to = expect!(
-                                    self,
-                                    Token::LeftParen => {
-                                        let multiplier = self.parse_expression(0)?;
-                                        expect!(self, Token::RightParen);
-                                        let ident = expect!(self, Token::Tag(tag) => tag);
-                                        (Some(multiplier), ident)
-                                    },
-                                    Token::Tag(ident) => (None, ident),
-                                );
-                                expect!(self, Token::Tag(ref tag) if tag == ":");
-                                let points = self.parse_comma_point_list()?;
-                                Ok(Some(StatementKind::PointBetween { from, to, points }))
-                            }
-                            _ => Err(ParserError::Token(Token::Tag(tag), self.line()).into()),
-                        }
-                    }
+                    "points" => self.parse_points_statement(),
                     // route
                     "route" => {
-                        let (name, style) = expect!(self,
+                        let (name, style) = expect! { self,
                             Token::Tag(name) => (name, None),
                             Token::Dot => {
                                 let style = expect!(self, Token::Tag(style) => Some(style));
                                 let name = expect!(self, Token::Tag(name) => name);
                                 (name, style)
                             },
-                        );
+                        };
                         expect!(self, Token::Tag(ref tag) if tag == ":");
                         let segments = self.parse_route()?;
                         Ok(Some(StatementKind::Route {
@@ -343,49 +309,7 @@ where
                         }))
                     }
                     // stop
-                    "stop" => {
-                        let (point, style) = expect!(self,
-                            Token::Tag(point) => (point, None),
-                            Token::Dot => {
-                                let style = expect!(self, Token::Tag(style) => Some(style));
-                                let point = expect!(self, Token::Tag(point) => point);
-                                (point, style)
-                            },
-                        );
-                        expect!(self, Token::LeftParen);
-                        let tag = expect!(self, Token::Tag(tag) => tag);
-                        let routes = if tag == "all" {
-                            expect!(self, Token::RightParen);
-                            None
-                        } else {
-                            self.put_back(Token::Tag(tag));
-                            let mut routes = Vec::new();
-                            loop {
-                                expect!(self, Token::Tag(tag) => routes.push(tag));
-                                expect!(self, Token::RightParen => break, Token::Comma => {});
-                            }
-                            Some(routes)
-                        };
-                        let label = expect!(self,
-                            Token::String(text) => {
-                                let tag = expect!(self, Token::Tag(tag) => tag);
-                                let position = tag.try_into().map_err(|tag| {
-                                    ParserError::Token(Token::Tag(tag), self.line())
-                                })?;
-                                Some(Label { text, position })
-                            },
-                            Token::Semicolon => {
-                                self.put_back(Token::Semicolon);
-                                None
-                            },
-                        );
-                        Ok(Some(StatementKind::Stop {
-                            point,
-                            style,
-                            routes,
-                            label,
-                        }))
-                    }
+                    "stop" => self.parse_stop_statement(),
                     // other (variable assignment)
                     _ => {
                         let tag = self.parse_dotted_ident(tag)?;
@@ -405,6 +329,85 @@ where
             // empty statement, end of input
             None => Ok(None),
         }
+    }
+
+    fn parse_points_statement(&mut self) -> EResult<Option<StatementKind>> {
+        expect!(self, Token::Tag(ref tag) if tag == "from");
+        let from = expect!(self, Token::Tag(tag) => tag);
+        let kind = expect!(self, Token::Tag(tag) => tag);
+        match kind.as_ref() {
+            // from ... spaced
+            "spaced" => {
+                let spaced = self.parse_expression(0)?;
+                expect!(self, Token::Tag(ref tag) if tag == ":");
+                let points = self.parse_comma_point_list()?;
+                Ok(Some(StatementKind::PointSpaced {
+                    from,
+                    spaced,
+                    points,
+                }))
+            }
+            // from ... to
+            "to" => {
+                let to = expect! { self,
+                    Token::LeftParen => {
+                        let multiplier = self.parse_expression(0)?;
+                        expect!(self, Token::RightParen);
+                        let ident = expect!(self, Token::Tag(tag) => tag);
+                        (Some(multiplier), ident)
+                    },
+                    Token::Tag(ident) => (None, ident),
+                };
+                expect!(self, Token::Tag(ref tag) if tag == ":");
+                let points = self.parse_comma_point_list()?;
+                Ok(Some(StatementKind::PointBetween { from, to, points }))
+            }
+            _ => Err(ParserError::Token(Token::Tag(kind), self.line()).into()),
+        }
+    }
+
+    fn parse_stop_statement(&mut self) -> EResult<Option<StatementKind>> {
+        let (point, style) = expect! { self,
+            Token::Tag(point) => (point, None),
+            Token::Dot => {
+                let style = expect!(self, Token::Tag(style) => Some(style));
+                let point = expect!(self, Token::Tag(point) => point);
+                (point, style)
+            },
+        };
+        expect!(self, Token::LeftParen);
+        let tag = expect!(self, Token::Tag(tag) => tag);
+        let routes = if tag == "all" {
+            expect!(self, Token::RightParen);
+            None
+        } else {
+            self.put_back(Token::Tag(tag));
+            let mut routes = Vec::new();
+            loop {
+                expect!(self, Token::Tag(tag) => routes.push(tag));
+                expect!(self, Token::RightParen => break, Token::Comma => {});
+            }
+            Some(routes)
+        };
+        let label = expect! { self,
+            Token::String(text) => {
+                let tag = expect!(self, Token::Tag(tag) => tag);
+                let position = tag.try_into().map_err(|tag| {
+                    ParserError::Token(Token::Tag(tag), self.line())
+                })?;
+                Some(Label { text, position })
+            },
+            Token::Semicolon => {
+                self.put_back(Token::Semicolon);
+                None
+            },
+        };
+        Ok(Some(StatementKind::Stop {
+            point,
+            style,
+            routes,
+            label,
+        }))
     }
 }
 
