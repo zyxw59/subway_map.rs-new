@@ -124,6 +124,13 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn as_number(self) -> Option<f64> {
+        match self {
+            Value::Number(x) => Some(x),
+            _ => None,
+        }
+    }
+
     pub fn point(x: Value, y: Value) -> Result {
         numeric_fn!((x, y) => Ok(Value::Point(x, y)))
     }

@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
-use crate::error::{EvaluatorError, MathError, Result as EResult};
+use crate::error::{EvaluatorError, MathError, Result as EResult, Type};
 use crate::expressions::{Function, Variable};
 use crate::points::PointCollection;
-use crate::statement::{Statement, StatementKind};
+use crate::statement::{Segment, Statement, StatementKind};
 use crate::values::{Point, Value};
 
 pub trait EvaluationContext {
@@ -18,6 +18,7 @@ pub struct Evaluator {
     variables: HashMap<Variable, Value>,
     functions: HashMap<Variable, Function>,
     points: PointCollection,
+    routes: Vec<Route>,
 }
 
 impl Evaluator {
@@ -26,6 +27,7 @@ impl Evaluator {
             variables: HashMap::new(),
             functions: HashMap::new(),
             points: PointCollection::new(),
+            routes: Vec::new(),
         }
     }
 
@@ -127,6 +129,47 @@ impl Evaluator {
                     line,
                 );
             }
+            StatementKind::Route {
+                name,
+                style,
+                segments,
+            } => {
+                let width = style
+                    .as_ref()
+                    // if style is present, get the appropriate line_sep
+                    .and_then(|style| self.get_variable(&format!("line_sep.{}", style)))
+                    // if line_sep.style isn't set, or if style isn't set, get the default line_sep
+                    .or_else(|| self.get_variable("line_sep"))
+                    // convert value to number
+                    .and_then(Value::as_number)
+                    // if it wasn't found, or wasn't a number, default to 1
+                    .unwrap_or(1.0);
+                for Segment { start, end, offset } in &segments {
+                    let offset = match offset
+                        .evaluate(self)
+                        .map_err(|err| EvaluatorError::Math(err, line))?
+                    {
+                        // if offset evaluates to a number, coerce it to an integer
+                        // TODO: add warning if it's not an integer
+                        Value::Number(x) => x as isize,
+                        // if offset evaluates to something else (i.e. a point), raise a type error
+                        value => Err(EvaluatorError::Math(
+                            MathError::Type(Type::Number, value.into()),
+                            line,
+                        ))?,
+                    };
+                    self.points
+                        .add_segment(start, end, offset, width)
+                        .map_err(|name| {
+                            EvaluatorError::Math(MathError::Variable(name.into()), line)
+                        })?;
+                }
+                self.routes.push(Route {
+                    name,
+                    style,
+                    segments,
+                });
+            }
             _ => {
                 unimplemented!();
             }
@@ -156,6 +199,13 @@ impl EvaluationContext for () {
     fn get_function(&self, _name: &str) -> Option<&Function> {
         None
     }
+}
+
+#[derive(Debug)]
+struct Route {
+    name: Variable,
+    style: Option<Variable>,
+    segments: Vec<Segment>,
 }
 
 #[cfg(test)]
