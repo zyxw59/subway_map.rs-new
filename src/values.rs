@@ -241,7 +241,7 @@ impl ops::Add for Value {
         Ok(match (self, rhs) {
             (Number(a), Number(b)) => Number(a + b),
             (Point(x1, y1), Point(x2, y2)) => Point(x1 + x2, y1 + y2),
-            _ => Err(MathError::Type(self.into(), rhs.into()))?,
+            _ => return Err(MathError::Type(self.into(), rhs.into())),
         })
     }
 }
@@ -254,7 +254,7 @@ impl ops::Sub for Value {
         Ok(match (self, rhs) {
             (Number(a), Number(b)) => Number(a - b),
             (Point(x1, y1), Point(x2, y2)) => Point(x1 - x2, y1 - y2),
-            _ => Err(MathError::Type(self.into(), rhs.into()))?,
+            _ => return Err(MathError::Type(self.into(), rhs.into())),
         })
     }
 }
@@ -279,10 +279,10 @@ impl ops::Div for Value {
     fn div(self, rhs: Value) -> Result {
         use self::Value::*;
         Ok(match (self, rhs) {
-            (_, Number(x)) if x == 0.0 => Err(MathError::DivisionByZero)?,
+            (_, Number(x)) if x == 0.0 => return Err(MathError::DivisionByZero),
             (Number(a), Number(b)) => Number(a / b),
             (Point(x, y), Number(a)) => Point(x / a, y / a),
-            _ => Err(MathError::Type(Type::Number, rhs.into()))?,
+            _ => return Err(MathError::Type(Type::Number, rhs.into())),
         })
     }
 }

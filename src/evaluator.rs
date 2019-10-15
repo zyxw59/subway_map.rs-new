@@ -153,10 +153,13 @@ impl Evaluator {
                         // TODO: add warning if it's not an integer
                         Value::Number(x) => x as isize,
                         // if offset evaluates to something else (i.e. a point), raise a type error
-                        value => Err(EvaluatorError::Math(
-                            MathError::Type(Type::Number, value.into()),
-                            line,
-                        ))?,
+                        value => {
+                            return Err(EvaluatorError::Math(
+                                MathError::Type(Type::Number, value.into()),
+                                line,
+                            )
+                            .into());
+                        }
                     };
                     self.points
                         .add_segment(start, end, offset, width)

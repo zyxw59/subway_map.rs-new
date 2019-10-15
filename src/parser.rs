@@ -42,8 +42,8 @@ macro_rules! expect {
         match try_opt!($self.next()) {
             $(Some($token) $(if $guard)? => $capture),*,
             #[allow(unreachable_patterns)] // to allow for expect!(self, tok, tok)
-            Some(tok) => Err(ParserError::Token(tok, $self.line()))?,
-            None => Err(ParserError::EndOfInput($self.line()))?,
+            Some(tok) => return Err(ParserError::Token(tok, $self.line()).into()),
+            None => return Err(ParserError::EndOfInput($self.line()).into()),
         }
     };
 }
@@ -94,7 +94,7 @@ where
 
     fn parse_primary(&mut self) -> EResult<Expression> {
         match try_opt!(self.next()) {
-            None => Err(ParserError::EndOfInput(self.line()))?,
+            None => Err(ParserError::EndOfInput(self.line()).into()),
             Some(Token::LeftParen) => self.parse_parentheses(),
             Some(Token::Number(num)) => Ok(Expression::Value(Value::Number(num))),
             Some(Token::Tag(tag)) => match UnaryBuiltins.get(&tag) {
@@ -108,8 +108,8 @@ where
                         let args = self.parse_comma_list()?;
                         match try_opt!(self.next()) {
                             Some(Token::RightParen) => {}
-                            Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                            None => Err(ParserError::Parentheses(start_line))?,
+                            Some(tok) => return Err(ParserError::Token(tok, self.line()).into()),
+                            None => return Err(ParserError::Parentheses(start_line).into()),
                         };
                         Ok(Expression::Function(tag, args))
                     } else {
@@ -120,7 +120,7 @@ where
                     }
                 }
             },
-            Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+            Some(tok) => Err(ParserError::Token(tok, self.line()).into()),
         }
     }
 
@@ -148,12 +148,12 @@ where
                 let x = list.pop().unwrap();
                 Expression::Point(Box::new((x, y)))
             }
-            n => Err(ParserError::ParenList(n, start_line))?,
+            n => return Err(ParserError::ParenList(n, start_line).into()),
         };
         match try_opt!(self.next()) {
             Some(Token::RightParen) => Ok(exp),
-            Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-            None => Err(ParserError::Parentheses(start_line))?,
+            Some(tok) => Err(ParserError::Token(tok, self.line()).into()),
+            None => Err(ParserError::Parentheses(start_line).into()),
         }
     }
 
@@ -204,14 +204,14 @@ where
                     match try_opt!(self.next()) {
                         Some(Token::Comma) => {}
                         Some(Token::RightParen) => break,
-                        Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                        None => Err(ParserError::Parentheses(start_line))?,
+                        Some(tok) => return Err(ParserError::Token(tok, self.line()).into()),
+                        None => return Err(ParserError::Parentheses(start_line).into()),
                     }
                 }
                 // end of the arguments
                 Some(Token::RightParen) => break,
-                Some(tok) => Err(ParserError::Token(tok, self.line()))?,
-                None => Err(ParserError::Parentheses(start_line))?,
+                Some(tok) => return Err(ParserError::Token(tok, self.line()).into()),
+                None => return Err(ParserError::Parentheses(start_line).into()),
             }
         }
         expect!(self, Token::Equal);
@@ -232,7 +232,7 @@ where
                     (Some(multiplier), ident)
                 }
                 Token::Tag(ident) => (None, ident),
-                _ => Err(ParserError::Token(tok, self.line()))?,
+                _ => return Err(ParserError::Token(tok, self.line()).into()),
             };
             points.push(point);
             match try_opt!(self.next()) {
@@ -242,7 +242,7 @@ where
                     self.put_back(Token::Semicolon);
                     break;
                 }
-                Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+                Some(tok) => return Err(ParserError::Token(tok, self.line()).into()),
             }
         }
         Ok(points)
@@ -321,7 +321,7 @@ where
                                 let points = self.parse_comma_point_list()?;
                                 Ok(Some(StatementKind::PointBetween { from, to, points }))
                             }
-                            _ => Err(ParserError::Token(Token::Tag(tag), self.line()))?,
+                            _ => Err(ParserError::Token(Token::Tag(tag), self.line()).into()),
                         }
                     }
                     // route
@@ -401,7 +401,7 @@ where
                 Ok(Some(StatementKind::Null))
             }
             // other token; unexpected
-            Some(tok) => Err(ParserError::Token(tok, self.line()))?,
+            Some(tok) => Err(ParserError::Token(tok, self.line()).into()),
             // empty statement, end of input
             None => Ok(None),
         }

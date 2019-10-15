@@ -70,7 +70,7 @@ pub struct BinaryBuiltins;
 
 impl BinaryBuiltins {
     pub fn get(&self, key: &str) -> Option<&'static BinaryOperator<'static>> {
-        match key.as_ref() {
+        match key {
             "==" => Some(&builtins::EQ),
             "!=" => Some(&builtins::NE),
             "<" => Some(&builtins::LT),
@@ -93,7 +93,7 @@ pub struct UnaryBuiltins;
 
 impl UnaryBuiltins {
     pub fn get(&self, key: &str) -> Option<&'static UnaryOperator<'static>> {
-        match key.as_ref() {
+        match key {
             "-" => Some(&builtins::NEG),
             "cos" => Some(&builtins::COS),
             "sin" => Some(&builtins::SIN),

@@ -119,14 +119,14 @@ impl<R: BufRead> Lexer<R> {
                     match self.get()? {
                         Some('n') => s.push('\n'),
                         Some(c) => s.push(c),
-                        None => Err(LexerError::UnterminatedString(self.line))?,
+                        None => return Err(LexerError::UnterminatedString(self.line).into()),
                     }
                     self.pos += 1;
                 }
                 c => s.push(c),
             }
         }
-        Err(LexerError::UnterminatedString(self.line))?
+        Err(LexerError::UnterminatedString(self.line).into())
     }
 
     fn parse_dot(&mut self) -> EResult<Token> {
