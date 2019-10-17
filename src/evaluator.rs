@@ -42,6 +42,10 @@ impl Evaluator {
         match statement {
             StatementKind::Null => {}
             StatementKind::Variable(name, expr) => {
+                // named points can't be redefined, since lines are defined in terms of them
+                if let Some(original_line) = self.points.get_point_line_number(&name) {
+                    return Err(EvaluatorError::PointRedefinition(name, line, original_line).into());
+                }
                 let value = expr
                     .evaluate(self)
                     .map_err(|err| EvaluatorError::Math(err, line))?;
@@ -51,7 +55,7 @@ impl Evaluator {
                 self.functions.insert(name, function);
             }
             StatementKind::PointSingle(name, expr) => {
-                // points can't be redefined, since lines are defined in terms of them
+                // named points can't be redefined, since lines are defined in terms of them
                 if let Some(original_line) = self.points.get_point_line_number(&name) {
                     return Err(EvaluatorError::PointRedefinition(name, line, original_line).into());
                 }
