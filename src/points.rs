@@ -679,47 +679,40 @@ impl Segment {
         } else {
             self.offset_max(default_width) - abs_offset
         };
-        (offset, radius)
+        (offset, radius.abs())
     }
 
     fn offset_max(&self, default_width: f64) -> f64 {
-        if self.pos_offsets.len() > 0 {
+        if !self.pos_offsets.is_empty() {
             self.calculate_offset((self.pos_offsets.len() - 1) as isize, false, default_width)
         } else {
-            let mut acc = default_width / 2.0;
             let mut n = 0;
             for w in &self.neg_offsets {
-                if let Some(w) = w {
-                    acc += w / 2.0;
+                if w.is_some() {
                     break;
                 } else {
                     n += 1;
                 }
             }
-            acc + n as f64 * default_width
+            f64::from(n) * default_width
         }
     }
 
     fn offset_min(&self, default_width: f64) -> f64 {
-        if self.neg_offsets.len() > 0 {
+        if !self.neg_offsets.is_empty() {
             self.calculate_offset(!(self.neg_offsets.len() - 1) as isize, false, default_width)
+        } else if self.pos_offsets[0].is_none() {
+            0.0
         } else {
-            let mut acc = self
-                .pos_offsets
-                .get(0)
-                .unwrap_or(&None)
-                .unwrap_or(default_width)
-                / 2.0;
             let mut n = 0;
-            for w in &self.neg_offsets {
-                if let Some(w) = w {
-                    acc += w / 2.0;
+            for w in &self.pos_offsets {
+                if w.is_some() {
                     break;
                 } else {
                     n += 1;
                 }
             }
-            acc + n as f64 * default_width
+            f64::from(n) * default_width
         }
     }
 
