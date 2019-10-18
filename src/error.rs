@@ -63,6 +63,8 @@ pub enum EvaluatorError {
         _0, _1, _2
     )]
     PointRedefinition(Variable, usize, usize),
+    #[fail(display = "An IO error ({}) occured during output", _0)]
+    Io(#[cause] io::Error),
 }
 
 #[derive(Fail, Debug)]

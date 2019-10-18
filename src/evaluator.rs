@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::io::{Result as IoResult, Write};
 
 use crate::error::{EvaluatorError, MathError, Result as EResult, Type};
 use crate::expressions::{Function, Variable};
 use crate::points::PointCollection;
-use crate::statement::{Segment, Statement, StatementKind};
+use crate::statement::{Statement, StatementKind};
 use crate::values::{Point, Value};
 
 pub trait EvaluationContext {
@@ -13,7 +14,7 @@ pub trait EvaluationContext {
     fn get_function(&self, name: &str) -> Option<&Function>;
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Evaluator {
     variables: HashMap<Variable, Value>,
     functions: HashMap<Variable, Function>,
@@ -22,7 +23,7 @@ pub struct Evaluator {
 }
 
 impl Evaluator {
-    fn new() -> Evaluator {
+    pub fn new() -> Evaluator {
         Evaluator {
             variables: HashMap::new(),
             functions: HashMap::new(),
@@ -31,7 +32,10 @@ impl Evaluator {
         }
     }
 
-    fn evaluate_all(&mut self, parser: impl Iterator<Item = EResult<Statement>>) -> EResult<()> {
+    pub fn evaluate_all(
+        &mut self,
+        parser: impl Iterator<Item = EResult<Statement>>,
+    ) -> EResult<()> {
         for statement in parser {
             self.evaluate(statement?)?;
         }
@@ -148,8 +152,10 @@ impl Evaluator {
                     .and_then(Value::as_number)
                     // if it wasn't found, or wasn't a number, default to 1
                     .unwrap_or(1.0);
-                for Segment { start, end, offset } in &segments {
-                    let offset = match offset
+                let mut new_segments = Vec::with_capacity(segments.len());
+                for segment in segments {
+                    let offset = match segment
+                        .offset
                         .evaluate(self)
                         .map_err(|err| EvaluatorError::Math(err, line))?
                     {
@@ -165,21 +171,125 @@ impl Evaluator {
                             .into());
                         }
                     };
-                    self.points
-                        .add_segment(start, end, offset, width)
-                        .map_err(|name| {
-                            EvaluatorError::Math(MathError::Variable(name.into()), line)
-                        })?;
+                    let segment = Segment {
+                        start: segment.start,
+                        end: segment.end,
+                        offset,
+                    };
+                    self.points.add_segment(&segment, width).map_err(|name| {
+                        EvaluatorError::Math(MathError::Variable(name.into()), line)
+                    })?;
+                    new_segments.push(segment);
                 }
                 self.routes.push(Route {
                     name,
                     style,
-                    segments,
+                    width,
+                    segments: new_segments,
                 });
             }
             _ => {
-                unimplemented!();
+                //unimplemented!();
             }
+        }
+        Ok(())
+    }
+
+    pub fn draw_routes(&self, f: &mut impl Write) -> IoResult<()> {
+        use crate::points::Collinearity;
+        use itertools::Itertools;
+        let line_sep = self
+            .variables
+            .get("line_sep")
+            .copied()
+            .and_then(Value::as_number)
+            .unwrap_or(1.0);
+        let inner_radius = self
+            .variables
+            .get("inner_radius")
+            .copied()
+            .and_then(Value::as_number)
+            .unwrap_or(0.0);
+        for route in &self.routes {
+            // frontmater
+            write!(f, "<path")?;
+            write!(f, " id=\"route-{}\"", route.name)?;
+            write!(f, " class=\"route")?;
+            if let Some(style) = &route.style {
+                write!(f, " route-{}", style)?;
+            }
+            write!(f, "\"")?;
+            if route.segments.is_empty() {
+                write!(f, " />")?;
+                break;
+            }
+            // now on to drawing the route
+            write!(f, " d=\"")?;
+            write!(
+                f,
+                "M {}",
+                self.points
+                    .segment_start(route.segments.first().unwrap(), line_sep)
+            )?;
+            for (current, next) in route.segments.iter().tuple_windows() {
+                // process `current` in the loop; `next` will be handled on the next iteration, or
+                // after the loop, for the last segment.
+                for shift in self.points.parallel_shifts(current, line_sep) {
+                    write!(f, " {}", shift)?;
+                }
+                if current.end == next.start {
+                    match self
+                        .points
+                        .are_collinear(&current.start, &current.end, &next.end)
+                    {
+                        Collinearity::Sequential => {
+                            // parallel shift
+                            if let Some(shift) = self.points.parallel_shift(current, next, line_sep)
+                            {
+                                write!(f, " {}", shift)?;
+                            }
+                        }
+                        Collinearity::NotSequential => {
+                            if current.offset == -next.offset {
+                                // no turn, just a straight line ending.
+                                write!(f, " L {}", self.points.segment_end(current, line_sep))?;
+                            } else {
+                                // u-turn
+                                write!(f, " {}", self.points.u_turn(current, next, line_sep))?;
+                            }
+                        }
+                        Collinearity::NotColinear => {
+                            // corner
+                            write!(
+                                f,
+                                " {}",
+                                self.points.corner(current, next, line_sep, inner_radius)
+                            )?;
+                        }
+                    }
+                } else {
+                    // end this line, and move to the start of the next.
+                    write!(
+                        f,
+                        " L {} M {}",
+                        self.points.segment_end(current, line_sep),
+                        self.points.segment_start(next, line_sep)
+                    )?;
+                }
+            }
+            let current = route.segments.last().unwrap();
+            for shift in self.points.parallel_shifts(current, line_sep) {
+                write!(f, " {}", shift)?;
+            }
+            write!(f, " L {}", self.points.segment_end(current, line_sep))?;
+            writeln!(f, "\" />")?;
+        }
+        Ok(())
+    }
+
+    pub fn draw_points(&self, f: &mut impl Write) -> IoResult<()> {
+        for p in self.points.point_iter() {
+            writeln!(f, "<circle cx=\"{:.4}\" cy=\"{:.4}\" r=\"1\" />", p.0, p.1)?;
         }
         Ok(())
     }
@@ -212,7 +322,15 @@ impl EvaluationContext for () {
 struct Route {
     name: Variable,
     style: Option<Variable>,
+    width: f64,
     segments: Vec<Segment>,
+}
+
+#[derive(Debug)]
+pub struct Segment {
+    pub start: Variable,
+    pub end: Variable,
+    pub offset: isize,
 }
 
 #[cfg(test)]

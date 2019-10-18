@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::fmt;
 use std::ops;
 use std::result;
 
@@ -39,6 +40,38 @@ impl Point {
     pub fn norm2(self) -> f64 {
         self * self
     }
+
+    /// Returns a unit vector in the direction of the point.
+    pub fn unit(self) -> Point {
+        self / self.norm()
+    }
+
+    /// Rotates `self` 90 degrees clockwise.
+    pub fn perp(self) -> Point {
+        Point(self.1, -self.0)
+    }
+
+    /// Positive if `other` is clockwise of `self`.
+    pub fn cross(self, other: Point) -> f64 {
+        self.0 * other.1 - self.1 * other.0
+    }
+
+    /// Fused multiply-add. Computes `(self * a) + b with only one rounding error, yielding a more
+    /// accurate result than an unfused multiply-add.
+    pub fn mul_add(self, a: f64, b: Point) -> Point {
+        Point(self.0.mul_add(a, b.0), self.1.mul_add(a, b.1))
+    }
+
+    /// Constructs a new point equal to `a * self + b * self.perp()`.
+    pub fn basis(self, a: f64, b: f64) -> Point {
+        self.mul_add(a, b * self.perp())
+    }
+}
+
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:.4},{:.4}", self.0, self.1)
+    }
 }
 
 impl ops::Add for Point {
@@ -54,6 +87,14 @@ impl ops::Sub for Point {
 
     fn sub(self, other: Point) -> Point {
         Point(self.0 - other.0, self.1 - other.1)
+    }
+}
+
+impl ops::Neg for Point {
+    type Output = Point;
+
+    fn neg(self) -> Point {
+        Point(-self.0, -self.1)
     }
 }
 
@@ -332,7 +373,7 @@ fn sin_deg(x: f64) -> f64 {
     }
 }
 
-fn float_eq(x: f64, y: f64) -> bool {
+pub fn float_eq(x: f64, y: f64) -> bool {
     (x - y).abs() < ::std::f64::EPSILON
 }
 

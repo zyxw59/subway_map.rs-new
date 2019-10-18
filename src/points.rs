@@ -3,10 +3,12 @@ use std::collections::{HashMap, HashSet};
 
 use itertools::Itertools;
 
+use crate::corner::{Corner, ParallelShift};
+use crate::evaluator;
 use crate::expressions::Variable;
 use crate::values::Point;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PointCollection {
     points: Vec<PointInfo>,
     point_ids: HashMap<Variable, PointId>,
@@ -21,6 +23,10 @@ impl PointCollection {
 
     pub fn contains(&self, k: &str) -> bool {
         self.point_ids.contains_key(k)
+    }
+
+    pub fn point_iter(&self) -> impl Iterator<Item = &Point> {
+        self.points.iter().map(|info| &info.info.value)
     }
 
     fn get_point_info(&self, k: &str) -> Option<&PointInfo> {
@@ -180,17 +186,197 @@ impl PointCollection {
     /// Registers a given segment with the relevant line.
     pub fn add_segment<'a>(
         &mut self,
-        start_point: &'a str,
-        end_point: &'a str,
-        offset: isize,
+        segment: &'a evaluator::Segment,
         width: f64,
     ) -> Result<(), &'a str> {
-        let p1 = self.get_point_info(start_point).ok_or(start_point)?.info;
-        let p2 = self.get_point_info(end_point).ok_or(end_point)?.info;
+        let p1 = self
+            .get_point_info(&segment.start)
+            .ok_or(segment.start.as_ref())?
+            .info;
+        let p2 = self
+            .get_point_info(&segment.end)
+            .ok_or(segment.end.as_ref())?
+            .info;
         let line_id = self.get_or_insert_line(p1.id, p2.id);
-        self.lines[line_id].add_segment(p1, p2, offset, width);
+        self.lines[line_id].add_segment(p1, p2, segment.offset, width);
         Ok(())
     }
+
+    pub fn parallel_shifts(
+        &self,
+        segment: &evaluator::Segment,
+        default_width: f64,
+    ) -> impl Iterator<Item = ParallelShift> + '_ {
+        // this is only called on segments which have already been added, so we can be sure that
+        // all the points mentioned are valid.
+        let start_id = self.point_ids[&segment.start];
+        let end_id = self.point_ids[&segment.end];
+        let start = self.points[start_id].info;
+        let end = self.points[end_id].info;
+        let line = self.get_line(start_id, end_id).unwrap();
+        let (reverse, segments) = line.segments_between(start, end);
+        let offset = segment.offset;
+        segments.tuple_windows().filter_map(move |(prev, next)| {
+            let offset_in = prev.calculate_offset(offset, reverse, default_width);
+            let offset_out = next.calculate_offset(offset, reverse, default_width);
+            if crate::values::float_eq(offset_in, offset_out) {
+                None
+            } else {
+                let (dir, at) = if reverse {
+                    (-line.direction, line.point(prev.start.distance))
+                } else {
+                    (line.direction, line.point(prev.end.distance))
+                };
+                Some(ParallelShift::new(offset_in, offset_out, dir, at))
+            }
+        })
+    }
+
+    pub fn parallel_shift(
+        &self,
+        segment_in: &evaluator::Segment,
+        segment_out: &evaluator::Segment,
+        default_width: f64,
+    ) -> Option<ParallelShift> {
+        let start_id = self.point_ids[&segment_in.start];
+        let end_id = self.point_ids[&segment_in.end];
+        let start = self.points[start_id].info;
+        let end = self.points[end_id].info;
+        let line = self.get_line(start_id, end_id).unwrap();
+        let (reverse, prev, next) = line.segments_at(start, end);
+        let offset_in = prev.calculate_offset(segment_in.offset, reverse, default_width);
+        let offset_out = next.calculate_offset(segment_out.offset, reverse, default_width);
+        if crate::values::float_eq(offset_in, offset_out) {
+            None
+        } else {
+            let dir = if reverse {
+                -line.direction
+            } else {
+                line.direction
+            };
+            Some(ParallelShift::new(offset_in, offset_out, dir, start.value))
+        }
+    }
+
+    pub fn u_turn(
+        &self,
+        segment_in: &evaluator::Segment,
+        segment_out: &evaluator::Segment,
+        default_width: f64,
+    ) -> Corner {
+        let start_id = self.point_ids[&segment_in.start];
+        let end_id = self.point_ids[&segment_in.end];
+        let start = self.points[start_id].info;
+        let end = self.points[end_id].info;
+        let line = self.get_line(start_id, end_id).unwrap();
+        let (reverse, seg) = line.get_segment(start, end);
+        let offset_in = seg.calculate_offset(segment_in.offset, reverse, default_width);
+        let offset_out = seg.calculate_offset(segment_out.offset, !reverse, default_width);
+        Corner::u_turn(start.value, end.value, offset_in, offset_out)
+    }
+
+    pub fn corner(
+        &self,
+        segment_in: &evaluator::Segment,
+        segment_out: &evaluator::Segment,
+        default_width: f64,
+        inner_radius: f64,
+    ) -> Corner {
+        let start_id = self.point_ids[&segment_in.start];
+        let corner_id = self.point_ids[&segment_in.end];
+        let end_id = self.point_ids[&segment_out.end];
+        let start = self.points[start_id].info;
+        let corner = self.points[corner_id].info;
+        let end = self.points[end_id].info;
+        let line_in = self.get_line(start_id, corner_id).unwrap();
+        let line_out = self.get_line(corner_id, end_id).unwrap();
+        let (reverse_in, seg_in) = line_in.get_segment(start, corner);
+        let (reverse_out, seg_out) = line_out.get_segment(end, corner);
+        // true => to the left (line_in is right of end)
+        // false => to the righht (line_in is left of end)
+        let turn_in = line_in.right_of(end.value);
+        let (offset_in, radius_in) =
+            seg_in.calculate_offset_radius(segment_in.offset, reverse_in, turn_in, default_width);
+        let turn_out = line_out.right_of(start.value);
+        let (offset_out, radius_out) = seg_out.calculate_offset_radius(
+            segment_out.offset,
+            !reverse_out,
+            turn_out,
+            default_width,
+        );
+        Corner::new(
+            start.value,
+            corner.value,
+            end.value,
+            radius_in.max(radius_out) + inner_radius,
+        )
+        .offset(offset_in, offset_out)
+    }
+
+    pub fn segment_start(&self, segment: &evaluator::Segment, default_width: f64) -> Point {
+        self.segment_start_or_end(segment, true, default_width)
+    }
+
+    pub fn segment_end(&self, segment: &evaluator::Segment, default_width: f64) -> Point {
+        self.segment_start_or_end(segment, false, default_width)
+    }
+
+    fn segment_start_or_end(
+        &self,
+        segment: &evaluator::Segment,
+        is_start: bool,
+        default_width: f64,
+    ) -> Point {
+        let start_id = self.point_ids[&segment.start];
+        let end_id = self.point_ids[&segment.end];
+        let mut start = self.points[start_id].info;
+        let mut end = self.points[end_id].info;
+        let line = self.get_line(start_id, end_id).unwrap();
+        if is_start {
+            std::mem::swap(&mut start, &mut end);
+        }
+        let (mut reverse, seg) = line.get_segment(start, end);
+        // if `is_start`, we reversed the start and end points already, so flip `reverse`
+        reverse ^= is_start;
+        let mut offset = seg.calculate_offset(segment.offset, reverse, default_width);
+        // we want absoolute offset.
+        if reverse {
+            offset = -offset;
+        }
+        line.direction.unit().perp().mul_add(-offset, end.value)
+    }
+
+    pub fn are_collinear(&self, p1: &str, p2: &str, p3: &str) -> Collinearity {
+        // this is only called on segments which have already been added, so we can be sure that
+        // all the points mentioned are valid.
+        let p1_id = self.point_ids[p1];
+        let p2_id = self.point_ids[p2];
+        let p3_id = self.point_ids[p3];
+        if self.pairs[&(p1_id, p2_id)] != self.pairs[&(p2_id, p3_id)] {
+            Collinearity::NotColinear
+        } else {
+            let line = self.get_line(p1_id, p2_id).unwrap();
+            let p1 = line.line_point(self.points[p1_id].info);
+            let p2 = line.line_point(self.points[p2_id].info);
+            let p3 = line.line_point(self.points[p3_id].info);
+            if p1 <= p2 && p2 <= p3 || p3 <= p2 && p2 <= p1 {
+                Collinearity::Sequential
+            } else {
+                Collinearity::NotSequential
+            }
+        }
+    }
+}
+
+/// The result of `are_collinear`.
+#[derive(Clone, Copy, Debug)]
+pub enum Collinearity {
+    /// The three points are collinear, and in order.
+    Sequential,
+    /// The three points are collinear, but not in order.
+    NotSequential,
+    /// The three points are not collinear.
+    NotColinear,
 }
 
 #[derive(Clone, Debug)]
@@ -303,14 +489,8 @@ impl Line {
         // make immutable again
         let (p1, p2, offset) = (p1, p2, offset);
 
-        let start_seg = self
-            .segments
-            .binary_search_by(|seg| seg.partial_cmp(&p1).unwrap());
-        let end_seg = self
-            .segments
-            .binary_search_by(|seg| seg.partial_cmp(&p2).unwrap());
-        let start = start_seg.unwrap_or_else(|err| err);
-        let end = end_seg.unwrap_or_else(|err| err);
+        let start_seg = self.segments.binary_search_by(|seg| seg.cmp(&p1));
+        let end_seg = self.segments.binary_search_by(|seg| seg.cmp(&p2));
         let pre_split = match start_seg {
             Ok(start) => self.segments[start].split(p1),
             Err(start) => {
@@ -327,25 +507,106 @@ impl Line {
                 .split(p2)
                 .map(|seg| seg.update_new(offset, width)),
             Err(end) => {
-                let start_point = if let Some(prev_seg) = self.segments.get(end - 1) {
-                    prev_seg.start.max(p1)
+                let start_point = if end > 0 {
+                    self.segments[end - 1].end.max(p1)
                 } else {
                     p1
                 };
-                Some(Segment::new(start_point, p2, offset, width))
+                if start_point == p2 {
+                    None
+                } else {
+                    Some(Segment::new(start_point, p2, offset, width))
+                }
             }
         };
+        let start = start_seg.unwrap_or_else(|err| err);
+        let end = end_seg.unwrap_or_else(|err| err);
         // update the intermediate segments
         for seg in &mut self.segments[start..end] {
             seg.update(offset, width);
         }
         // insert the new segments if necessary
-        if let Some(post_split) = post_split {
-            self.segments.insert(end + 1, post_split);
+        // NOTE: followup to check for bugs
+        if post_split != pre_split {
+            if let Some(post_split) = post_split {
+                self.segments.insert(end, post_split);
+            }
         }
         if let Some(pre_split) = pre_split {
             self.segments.insert(start, pre_split);
         }
+    }
+
+    fn segments_between(
+        &self,
+        start: PointInfoLite,
+        end: PointInfoLite,
+    ) -> (bool, Box<dyn Iterator<Item = &Segment> + '_>) {
+        let mut start = self.line_point(start);
+        let mut end = self.line_point(end);
+        let reverse = start > end;
+        if reverse {
+            std::mem::swap(&mut start, &mut end);
+        }
+        // make immutable again
+        let (start, end) = (start, end);
+        // this is only called with points forming a segment which has been added, so they must
+        // match some segment.
+        let mut start_seg = self
+            .segments
+            .binary_search_by(|seg| seg.cmp(&start))
+            .unwrap();
+        if self.segments[start_seg].end == start {
+            // we matched the end of the previous segment
+            start_seg += 1;
+        }
+        let end_seg = self
+            .segments
+            .binary_search_by(|seg| seg.cmp(&end))
+            .unwrap_or_else(|err| err)
+            - 1;
+        if reverse {
+            (
+                reverse,
+                Box::new(self.segments[start_seg..=end_seg].iter().rev()),
+            )
+        } else {
+            (reverse, Box::new(self.segments[start_seg..=end_seg].iter()))
+        }
+    }
+
+    /// Returns the segments on either side of `end`
+    fn segments_at(&self, start: PointInfoLite, end: PointInfoLite) -> (bool, &Segment, &Segment) {
+        let start = self.line_point(start);
+        let end = self.line_point(end);
+        let reverse = start > end;
+        let idx = self.segments.binary_search_by(|seg| seg.cmp(&end)).unwrap();
+        if reverse {
+            (reverse, &self.segments[idx + 1], &self.segments[idx])
+        } else {
+            (reverse, &self.segments[idx], &self.segments[idx + 1])
+        }
+    }
+
+    /// Returns the segment ending at `end`
+    fn get_segment(&self, start: PointInfoLite, end: PointInfoLite) -> (bool, &Segment) {
+        let start = self.line_point(start);
+        let end = self.line_point(end);
+        let reverse = start > end;
+        let mut idx = self
+            .segments
+            .binary_search_by(|seg| seg.cmp(&end))
+            .unwrap_or_else(|err| err);
+        if !reverse {
+            idx -= 1
+        };
+        (reverse, &self.segments[idx])
+    }
+
+    /// True if the line is to the right of the specified point (looking in the direction of
+    /// `line.direction`.
+    fn right_of(&self, point: Point) -> bool {
+        self.direction.cross(point - self.origin) < 0.0
     }
 }
 
@@ -368,11 +629,105 @@ impl Segment {
         .update_new(offset, width)
     }
 
+    pub fn calculate_offset(&self, offset: isize, reverse: bool, default_width: f64) -> f64 {
+        if offset == 0 {
+            0.0
+        } else {
+            let offset = if reverse { -offset } else { offset };
+            let zero_offset = self
+                .pos_offsets
+                .get(0)
+                .unwrap_or(&None)
+                .unwrap_or(default_width);
+            let value: f64 = if offset >= 0 {
+                let offset = offset as usize;
+                zero_offset / 2.0
+                    + self.pos_offsets[1..offset]
+                        .iter()
+                        .map(|width| width.unwrap_or(default_width))
+                        .sum::<f64>()
+                    + self.pos_offsets[offset].unwrap_or(default_width) / 2.0
+            } else {
+                let offset = !offset as usize;
+                -zero_offset / 2.0
+                    - self.neg_offsets[..offset]
+                        .iter()
+                        .map(|width| width.unwrap_or(default_width))
+                        .sum::<f64>()
+                    - self.neg_offsets[offset].unwrap_or(default_width) / 2.0
+            };
+            if reverse {
+                -value
+            } else {
+                value
+            }
+        }
+    }
+
+    pub fn calculate_offset_radius(
+        &self,
+        offset: isize,
+        reverse: bool,
+        turn_dir: bool,
+        default_width: f64,
+    ) -> (f64, f64) {
+        let offset = self.calculate_offset(offset, reverse, default_width);
+        // offset relative to the line
+        let abs_offset = if reverse { -offset } else { offset };
+        let radius = if turn_dir {
+            abs_offset - self.offset_min(default_width)
+        } else {
+            self.offset_max(default_width) - abs_offset
+        };
+        (offset, radius)
+    }
+
+    fn offset_max(&self, default_width: f64) -> f64 {
+        if self.pos_offsets.len() > 0 {
+            self.calculate_offset((self.pos_offsets.len() - 1) as isize, false, default_width)
+        } else {
+            let mut acc = default_width / 2.0;
+            let mut n = 0;
+            for w in &self.neg_offsets {
+                if let Some(w) = w {
+                    acc += w / 2.0;
+                    break;
+                } else {
+                    n += 1;
+                }
+            }
+            acc + n as f64 * default_width
+        }
+    }
+
+    fn offset_min(&self, default_width: f64) -> f64 {
+        if self.neg_offsets.len() > 0 {
+            self.calculate_offset(!(self.neg_offsets.len() - 1) as isize, false, default_width)
+        } else {
+            let mut acc = self
+                .pos_offsets
+                .get(0)
+                .unwrap_or(&None)
+                .unwrap_or(default_width)
+                / 2.0;
+            let mut n = 0;
+            for w in &self.neg_offsets {
+                if let Some(w) = w {
+                    acc += w / 2.0;
+                    break;
+                } else {
+                    n += 1;
+                }
+            }
+            acc + n as f64 * default_width
+        }
+    }
+
     /// Split `self`, leaving the post-split segment in `self`'s place, returning the segment to
-    /// be inserted before `self`. If the split point is at one of the end points of `self` return
-    /// `None`, as no new segment needs to be inserted.
+    /// be inserted before `self`. If the split point is equal to `self.start`, return `None`, as
+    /// no new segment needs to be inserted.
     fn split(&mut self, point: LinePoint) -> Option<Segment> {
-        if point == self.start || point == self.end {
+        if point == self.start {
             None
         } else {
             // the split is in the middle
@@ -392,35 +747,36 @@ impl Segment {
     /// Update the segment with the given `offset` and `width`.
     fn update(&mut self, offset: isize, width: f64) {
         if offset >= 0 {
-            self.pos_offsets
-                .resize_with((offset as usize) + 1, Default::default);
-            self.pos_offsets[offset as usize] =
-                Some(self.pos_offsets[offset as usize].map_or(width, |old| old.max(width)));
+            let offset = offset as usize;
+            if offset >= self.pos_offsets.len() {
+                self.pos_offsets.resize_with(offset + 1, Default::default);
+            }
+            self.pos_offsets[offset] =
+                Some(self.pos_offsets[offset].map_or(width, |old| old.max(width)));
         } else {
-            let offset = !offset;
-            self.neg_offsets
-                .resize_with((offset as usize) + 1, Default::default);
-            self.neg_offsets[offset as usize] =
-                Some(self.neg_offsets[offset as usize].map_or(width, |old| old.max(width)));
+            let offset = !offset as usize;
+            if offset >= self.neg_offsets.len() {
+                self.neg_offsets.resize_with(offset + 1, Default::default);
+            }
+            self.neg_offsets[offset] =
+                Some(self.neg_offsets[offset].map_or(width, |old| old.max(width)));
+        }
+    }
+
+    fn cmp(&self, other: &LinePoint) -> Ordering {
+        if self.end <= *other {
+            Ordering::Less
+        } else if self.start > *other {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
         }
     }
 }
 
-impl PartialEq<LinePoint> for Segment {
-    fn eq(&self, other: &LinePoint) -> bool {
-        *other >= self.start && *other <= self.end
-    }
-}
-
-impl PartialOrd<LinePoint> for Segment {
-    fn partial_cmp(&self, other: &LinePoint) -> Option<Ordering> {
-        if *other < self.start {
-            Some(Ordering::Less)
-        } else if *other > self.end {
-            Some(Ordering::Greater)
-        } else {
-            Some(Ordering::Equal)
-        }
+impl PartialEq for Segment {
+    fn eq(&self, other: &Self) -> bool {
+        self.start == other.start && self.end == other.end
     }
 }
 
