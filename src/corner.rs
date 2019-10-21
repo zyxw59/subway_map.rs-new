@@ -84,12 +84,13 @@ pub struct ParallelShift(pub Point, pub Point, pub Point, pub Point);
 
 impl ParallelShift {
     pub fn new(offset_in: f64, offset_out: f64, dir: Point, at: Point) -> ParallelShift {
+        let dir = dir.unit();
         let delta = (offset_out - offset_in).abs();
         ParallelShift(
-            at + dir.basis(-delta, offset_in),
-            at + dir.basis(0.0, offset_in),
-            at + dir.basis(0.0, offset_out),
-            at + dir.basis(delta, offset_out),
+            at + dir.basis(-delta, -offset_in),
+            at + dir.basis(0.0, -offset_in),
+            at + dir.basis(0.0, -offset_out),
+            at + dir.basis(delta, -offset_out),
         )
     }
 }

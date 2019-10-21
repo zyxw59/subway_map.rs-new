@@ -254,7 +254,7 @@ impl PointCollection {
             } else {
                 line.direction
             };
-            Some(ParallelShift::new(offset_in, offset_out, dir, start.value))
+            Some(ParallelShift::new(offset_in, offset_out, dir, end.value))
         }
     }
 
@@ -582,9 +582,9 @@ impl Line {
         let reverse = start > end;
         let idx = self.segments.binary_search_by(|seg| seg.cmp(&end)).unwrap();
         if reverse {
-            (reverse, &self.segments[idx + 1], &self.segments[idx])
+            (reverse, &self.segments[idx], &self.segments[idx - 1])
         } else {
-            (reverse, &self.segments[idx], &self.segments[idx + 1])
+            (reverse, &self.segments[idx - 1], &self.segments[idx])
         }
     }
 
