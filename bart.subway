@@ -14,6 +14,9 @@ inner_radius = 20;
 ss = line_sep * 5;
 margin = (ss, ss);
 
+m = 1/2;
+
+
 # 60-degree grid
 NE = ss * dir 30;
 E  = ss * dir 90;
@@ -23,33 +26,33 @@ W  = ss * dir 270;
 NW = ss * dir 330;
 
 # oakland wye
-point wye = margin + 10 * SE;
+point wye = margin + (10 + 3 * m) * SE;
 
 # antioch line
-points from wye spaced NE: (1) st12, st19, mcar, (1) c0;
-points from c0  spaced E:  (1) rock, orin, lafy, (1) c35;
-points from c35 spaced NE: (1) wcrk, phil, conc, ncon, (1) c75;
-points from c75 spaced E:  (1) pitt, pctr, antc;
+points from wye spaced NE:  st12, st19, mcar, (m) c0;
+points from c0  spaced E:  (m) rock, orin, lafy, (m) c35;
+points from c35 spaced NE: (m) wcrk, phil, conc, ncon, (m) c75;
+points from c75 spaced E:  (m) pitt, pctr, antc;
 
 # richmond line
-points from c0  spaced NW: (1) ashb, dbrk, nbrk, plza, deln, rich;
+points from c0  spaced NW: (m) ashb, dbrk, nbrk, plza, deln, rich;
 
 # fremont line
 points from wye spaced SE:
-    (1) lake, ftvl, cols, sanl, bayf, (1) l0,
-    (1) hayw, shay, ucty, fmnt, warm;
+    lake, ftvl, cols, sanl, bayf, (m) l0,
+    (m) hayw, shay, ucty, fmnt, warm;
 
 # oakland airport connector
 point oakl = cols + SW;
 
 # dublin line
-points from l0  spaced E:  (1) cast, wdub, dubl;
+points from l0  spaced E: cast, wdub, dubl;
 
 # san francisco line
-points from wye spaced W:  (1) woak, (3/2) m15;
+points from wye spaced W:  woak, (2+2*m) m15;
 points from m15 spaced SW:
-    (1) embr, mont, powl, civc, st16, st24, glen, balb, daly, (1) w0;
-points from w0  spaced SE: (1) colm, ssan, sbrn, (1) y0, (1) mlbr;
+    (m) embr, mont, powl, civc, st16, st24, glen, balb, daly, (m) w0;
+points from w0  spaced SE: (m) colm, ssan, sbrn, y0, mlbr;
 
 # sfo line
 point sfia = y0 + ss * dir 60;
@@ -58,13 +61,13 @@ point sfia = y0 + ss * dir 60;
 # segment as written, so `a --(1) b` is the same as `b --(-1) a`
 route red_limited:    daly --( 1) w0 --( 1) mlbr;
 route yellow_limited: sfia --( 0) y0 --( 0) mlbr;
+route oac: cols --( 0) oakl;
 route purple:         sfia --(-1) y0 --(-1) mlbr;
-route orange:                     rich --(1) c0 --( 1) wye --( 1) warm;
-route red:                        rich --(0) c0 --( 0) wye --( 1) m15 --( 1) daly;
-route yellow: antc --(0) c75 --(0) c35 --(0) c0 --(-1) wye --( 0) m15 --( 0) w0 --( 0) y0 --( 0) sfia;
-route blue:                       dubl --(0) l0 --( 1) wye --(-1) m15 --(-1) daly;
-route green:                               warm --( 0) wye --(-2) m15 --(-2) daly;
-route oac: cols --(0) oakl;
+route red:                          rich --( 1) c0 --( 1) wye --( 1) m15 --( 1) daly;
+route yellow: antc --( 0) c75 --( 0) c35 --( 0) c0 --(-1) wye --( 0) m15 --( 0) w0 --( 0) y0 --( 0) sfia;
+route blue:                         dubl --( 0) l0 --( 1) wye --(-1) m15 --(-1) daly;
+route green:                                  warm --(-1) wye --(-2) m15 --(-2) daly;
+route orange:                       rich --( 0) c0 --( 0) wye --( 0) warm;
 
 #    style   point routes label    position
 stop.terminus antc (all) "Antioch" end;
