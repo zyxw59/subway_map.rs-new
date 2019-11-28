@@ -191,12 +191,9 @@ impl PointCollection {
     ) -> Result<(), &'a str> {
         let p1 = self
             .get_point_info(&segment.start)
-            .ok_or(segment.start.as_ref())?
+            .ok_or(&*segment.start)?
             .info;
-        let p2 = self
-            .get_point_info(&segment.end)
-            .ok_or(segment.end.as_ref())?
-            .info;
+        let p2 = self.get_point_info(&segment.end).ok_or(&*segment.end)?.info;
         let line_id = self.get_or_insert_line(p1.id, p2.id);
         self.lines[line_id].add_segment(p1, p2, segment.offset, width);
         Ok(())
