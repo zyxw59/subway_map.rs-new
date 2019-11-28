@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{Result as IoResult, Write};
 
-use crate::error::{EvaluatorError, MathError, Result as EResult, Type};
+use crate::error::{EvaluatorError, MathError, Result as EResult};
 use crate::expressions::{Function, Variable};
 use crate::points::PointCollection;
 use crate::statement::{Statement, StatementKind};
@@ -154,23 +154,14 @@ impl Evaluator {
                     .unwrap_or(1.0);
                 let mut new_segments = Vec::with_capacity(segments.len());
                 for segment in segments {
-                    let offset = match segment
+                    // if offset evaluates to a number, coerce it to an integer
+                    // TODO: add warning if it's not an integer
+                    let offset = segment
                         .offset
                         .evaluate(self)
+                        .and_then(f64::try_from)
                         .map_err(|err| EvaluatorError::Math(err, line))?
-                    {
-                        // if offset evaluates to a number, coerce it to an integer
-                        // TODO: add warning if it's not an integer
-                        Value::Number(x) => x as isize,
-                        // if offset evaluates to something else (i.e. a point), raise a type error
-                        value => {
-                            return Err(EvaluatorError::Math(
-                                MathError::Type(Type::Number, value.into()),
-                                line,
-                            )
-                            .into());
-                        }
-                    };
+                        as isize;
                     let segment = Segment {
                         start: segment.start,
                         end: segment.end,
