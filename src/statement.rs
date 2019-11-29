@@ -44,16 +44,7 @@ pub enum StatementKind {
         segments: Vec<Segment>,
     },
     /// A declaration of a stop.
-    Stop {
-        /// The location of the stop.
-        point: Variable,
-        /// The style of the stop.
-        style: Option<Variable>,
-        /// The set of routes which stop at the stop, or `None` if all lines stop.
-        routes: Option<Vec<Variable>>,
-        /// The label.
-        label: Option<Label>,
-    },
+    Stop(Stop),
 }
 
 /// A segment in a route.
@@ -65,6 +56,19 @@ pub struct Segment {
     pub end: Variable,
     /// The offset of the segment.
     pub offset: Expression,
+}
+
+/// A stop marker.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Stop {
+    /// The location of the stop.
+    pub point: Variable,
+    /// The style of the stop.
+    pub style: Option<Variable>,
+    /// The set of routes which stop at the stop, or `None` if all lines stop.
+    pub routes: Option<Vec<Variable>>,
+    /// The label.
+    pub label: Option<Label>,
 }
 
 /// A label for a stop.

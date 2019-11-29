@@ -5,7 +5,7 @@ use crate::error::{ParserError, Result as EResult};
 use crate::expressions::{Expression, Function, Variable};
 use crate::lexer::Token;
 use crate::operators::{BinaryBuiltins, UnaryBuiltins};
-use crate::statement::{Label, Segment, Statement, StatementKind};
+use crate::statement::{Label, Segment, Statement, StatementKind, Stop};
 use crate::values::Value;
 
 pub trait LexerExt: Iterator<Item = EResult<Token>> {
@@ -402,12 +402,12 @@ where
                 None
             },
         };
-        Ok(Some(StatementKind::Stop {
+        Ok(Some(StatementKind::Stop(Stop {
             point,
             style,
             routes,
             label,
-        }))
+        })))
     }
 }
 
@@ -433,7 +433,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::lexer::Lexer;
-    use crate::statement::{Label, LabelPosition, StatementKind};
+    use crate::statement::{Label, LabelPosition, StatementKind, Stop};
 
     use super::LexerExt;
 
@@ -616,7 +616,7 @@ mod tests {
     fn stop() {
         assert_statement!(
             r#"stop a (all) "A" above"#,
-            StatementKind::Stop {
+            StatementKind::Stop(Stop {
                 style: None,
                 point: "a".to_string(),
                 routes: None,
@@ -624,7 +624,7 @@ mod tests {
                     text: "A".to_string(),
                     position: LabelPosition::Above,
                 }),
-            }
+            })
         )
     }
 
@@ -632,7 +632,7 @@ mod tests {
     fn stop_with_style() {
         assert_statement!(
             r#"stop.terminus a (all) "A" end"#,
-            StatementKind::Stop {
+            StatementKind::Stop(Stop {
                 style: Some("terminus".to_string()),
                 point: "a".to_string(),
                 routes: None,
@@ -640,7 +640,7 @@ mod tests {
                     text: "A".to_string(),
                     position: LabelPosition::End,
                 }),
-            }
+            })
         )
     }
 
@@ -648,7 +648,7 @@ mod tests {
     fn stop_with_routes() {
         assert_statement!(
             r#"stop a (red, blue) "A" above"#,
-            StatementKind::Stop {
+            StatementKind::Stop(Stop {
                 style: None,
                 point: "a".to_string(),
                 routes: Some(vec!["red".to_string(), "blue".to_string()]),
@@ -656,7 +656,7 @@ mod tests {
                     text: "A".to_string(),
                     position: LabelPosition::Above,
                 }),
-            }
+            })
         )
     }
 
@@ -664,12 +664,12 @@ mod tests {
     fn stop_no_label() {
         assert_statement!(
             "stop a (all);",
-            StatementKind::Stop {
+            StatementKind::Stop(Stop {
                 style: None,
                 point: "a".to_string(),
                 routes: None,
                 label: None,
-            }
+            })
         )
     }
 }
