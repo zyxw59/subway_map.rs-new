@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::ops::{Index, IndexMut};
 
 use itertools::Itertools;
 
@@ -30,7 +31,9 @@ impl PointCollection {
     }
 
     fn get_point_info(&self, k: &str) -> Option<&PointInfo> {
-        self.point_ids.get(k).and_then(|id| self.points.get(*id))
+        self.point_ids
+            .get(k)
+            .and_then(|&PointId(id)| self.points.get(id))
     }
 
     pub fn get_point(&self, k: &str) -> Option<Point> {
@@ -49,14 +52,10 @@ impl PointCollection {
         value: Point,
         line_number: usize,
     ) -> PointId {
-        let id = points.len();
+        let id = PointId(points.len());
         points.push(PointInfo::new(value, id, line_number));
         point_ids.insert(name, id);
         id
-    }
-
-    fn get_line(&self, p1: PointId, p2: PointId) -> Option<&Line> {
-        self.pairs.get(&(p1, p2)).and_then(|&id| self.lines.get(id))
     }
 
     /// Returns a `LineId` so that `self` isn't mutably borrowed
@@ -64,10 +63,10 @@ impl PointCollection {
         if let Some(&line_id) = self.pairs.get(&(p1, p2)) {
             line_id
         } else {
-            let line_id = self.lines.len();
+            let line_id = LineId(self.lines.len());
             self.add_pair(p1, p2, line_id);
-            let p1 = &self.points[p1];
-            let p2 = &self.points[p2];
+            let p1 = &self[p1];
+            let p2 = &self[p2];
             let new_line = Line::from_pair(p1.info, p2.info);
             self.lines.push(new_line);
             line_id
@@ -79,7 +78,10 @@ impl PointCollection {
     pub fn get_points_of_line(&self, p1: &str, p2: &str) -> Option<Vec<Point>> {
         let p1 = self.get_point_info(p1)?.info;
         let p2 = self.get_point_info(p2)?.info;
-        let line = self.get_line(p1.id, p2.id)?;
+        let line = self
+            .pairs
+            .get(&(p1.id, p2.id))
+            .and_then(|&LineId(id)| self.lines.get(id))?;
         if line.distance(p1.value) < line.distance(p2.value) {
             Some(line.points.iter().map(|p| line.point(p.distance)).collect())
         } else {
@@ -106,8 +108,8 @@ impl PointCollection {
     fn add_pair(&mut self, p1: PointId, p2: PointId, line: LineId) {
         self.pairs.insert((p1, p2), line);
         self.pairs.insert((p2, p1), line);
-        self.points[p1].lines.insert(line);
-        self.points[p2].lines.insert(line);
+        self[p1].lines.insert(line);
+        self[p2].lines.insert(line);
     }
 
     pub fn new_line(
@@ -117,9 +119,9 @@ impl PointCollection {
         points: impl IntoIterator<Item = (Variable, f64)>,
         line_number: usize,
     ) {
-        let line_id = self.lines.len();
-        let start_id = *self.point_ids.get(&start_point).unwrap();
-        let origin = self.points[start_id].info;
+        let line_id = LineId(self.lines.len());
+        let start_id = self.point_ids[&start_point];
+        let origin = self[start_id].info;
         let mut line = Line::from_origin_direction(origin, direction);
         line.points
             .extend(points.into_iter().map(|(name, distance)| {
@@ -151,11 +153,11 @@ impl PointCollection {
         let start_id = self.point_ids[&start_point];
         let end_id = self.point_ids[&end_point];
         let line_id = self.get_or_insert_line(start_id, end_id);
-        let start = self.points[start_id].info.value;
-        let end = self.points[end_id].info.value;
+        let start = self[start_id].info.value;
+        let end = self[end_id].info.value;
         let direction = end - start;
         let (start_distance, distance_scale) = {
-            let line = &self.lines[line_id];
+            let line = &self[line_id];
             (line.distance(start), line.relative_distance(start, end))
         };
         let self_points = &mut self.points;
@@ -175,12 +177,12 @@ impl PointCollection {
                     distance: distance * distance_scale + start_distance,
                 }
             })
-            .merge(self.lines[line_id].points.iter().copied())
+            .merge(self.lines[line_id.0].points.iter().copied())
             .collect::<Vec<_>>();
         for (&p1, &p2) in new_points.iter().tuple_combinations() {
             self.add_pair(p1.id, p2.id, line_id);
         }
-        self.lines[line_id].points = new_points;
+        self[line_id].points = new_points;
     }
 
     /// Registers a given segment with the relevant line.
@@ -195,7 +197,7 @@ impl PointCollection {
             .info;
         let p2 = self.get_point_info(&segment.end).ok_or(&*segment.end)?.info;
         let line_id = self.get_or_insert_line(p1.id, p2.id);
-        self.lines[line_id].add_segment(p1, p2, segment.offset, width);
+        self[line_id].add_segment(p1, p2, segment.offset, width);
         Ok(())
     }
 
@@ -208,9 +210,9 @@ impl PointCollection {
         // all the points mentioned are valid.
         let start_id = self.point_ids[&segment.start];
         let end_id = self.point_ids[&segment.end];
-        let start = self.points[start_id].info;
-        let end = self.points[end_id].info;
-        let line = self.get_line(start_id, end_id).unwrap();
+        let start = self[start_id].info;
+        let end = self[end_id].info;
+        let line = &self[(start_id, end_id)];
         let (reverse, segments) = line.segments_between(start, end);
         let offset = segment.offset;
         segments.tuple_windows().filter_map(move |(prev, next)| {
@@ -237,9 +239,9 @@ impl PointCollection {
     ) -> Option<ParallelShift> {
         let start_id = self.point_ids[&segment_in.start];
         let end_id = self.point_ids[&segment_in.end];
-        let start = self.points[start_id].info;
-        let end = self.points[end_id].info;
-        let line = self.get_line(start_id, end_id).unwrap();
+        let start = self[start_id].info;
+        let end = self[end_id].info;
+        let line = &self[(start_id, end_id)];
         let (reverse, prev, next) = line.segments_at(start, end);
         let offset_in = prev.calculate_offset(segment_in.offset, reverse, default_width);
         let offset_out = next.calculate_offset(segment_out.offset, reverse, default_width);
@@ -263,9 +265,9 @@ impl PointCollection {
     ) -> Corner {
         let start_id = self.point_ids[&segment_in.start];
         let end_id = self.point_ids[&segment_in.end];
-        let start = self.points[start_id].info;
-        let end = self.points[end_id].info;
-        let line = self.get_line(start_id, end_id).unwrap();
+        let start = self[start_id].info;
+        let end = self[end_id].info;
+        let line = &self[(start_id, end_id)];
         let (reverse, seg) = line.get_segment(start, end);
         let offset_in = seg.calculate_offset(segment_in.offset, reverse, default_width);
         let offset_out = seg.calculate_offset(segment_out.offset, !reverse, default_width);
@@ -282,11 +284,11 @@ impl PointCollection {
         let start_id = self.point_ids[&segment_in.start];
         let corner_id = self.point_ids[&segment_in.end];
         let end_id = self.point_ids[&segment_out.end];
-        let start = self.points[start_id].info;
-        let corner = self.points[corner_id].info;
-        let end = self.points[end_id].info;
-        let line_in = self.get_line(start_id, corner_id).unwrap();
-        let line_out = self.get_line(corner_id, end_id).unwrap();
+        let start = self[start_id].info;
+        let corner = self[corner_id].info;
+        let end = self[end_id].info;
+        let line_in = &self[(start_id, corner_id)];
+        let line_out = &self[(corner_id, end_id)];
         let (reverse_in, seg_in) = line_in.get_segment(start, corner);
         let (reverse_out, seg_out) = line_out.get_segment(end, corner);
         // true => to the left (line_in is right of end)
@@ -326,9 +328,9 @@ impl PointCollection {
     ) -> Point {
         let start_id = self.point_ids[&segment.start];
         let end_id = self.point_ids[&segment.end];
-        let mut start = self.points[start_id].info;
-        let mut end = self.points[end_id].info;
-        let line = self.get_line(start_id, end_id).unwrap();
+        let mut start = self[start_id].info;
+        let mut end = self[end_id].info;
+        let line = &self[(start_id, end_id)];
         if is_start {
             std::mem::swap(&mut start, &mut end);
         }
@@ -352,16 +354,52 @@ impl PointCollection {
         if self.pairs[&(p1_id, p2_id)] != self.pairs[&(p2_id, p3_id)] {
             Collinearity::NotColinear
         } else {
-            let line = self.get_line(p1_id, p2_id).unwrap();
-            let p1 = line.line_point(self.points[p1_id].info);
-            let p2 = line.line_point(self.points[p2_id].info);
-            let p3 = line.line_point(self.points[p3_id].info);
+            let line = &self[(p1_id, p2_id)];
+            let p1 = line.line_point(self[p1_id].info);
+            let p2 = line.line_point(self[p2_id].info);
+            let p3 = line.line_point(self[p3_id].info);
             if p1 <= p2 && p2 <= p3 || p3 <= p2 && p2 <= p1 {
                 Collinearity::Sequential
             } else {
                 Collinearity::NotSequential
             }
         }
+    }
+}
+
+impl Index<PointId> for PointCollection {
+    type Output = PointInfo;
+
+    fn index(&self, PointId(idx): PointId) -> &PointInfo {
+        &self.points[idx]
+    }
+}
+
+impl IndexMut<PointId> for PointCollection {
+    fn index_mut(&mut self, PointId(idx): PointId) -> &mut PointInfo {
+        &mut self.points[idx]
+    }
+}
+
+impl Index<LineId> for PointCollection {
+    type Output = Line;
+
+    fn index(&self, LineId(idx): LineId) -> &Line {
+        &self.lines[idx]
+    }
+}
+
+impl IndexMut<LineId> for PointCollection {
+    fn index_mut(&mut self, LineId(idx): LineId) -> &mut Line {
+        &mut self.lines[idx]
+    }
+}
+
+impl Index<(PointId, PointId)> for PointCollection {
+    type Output = Line;
+
+    fn index(&self, (p1, p2): (PointId, PointId)) -> &Line {
+        &self[self.pairs[&(p1, p2)]]
     }
 }
 
@@ -377,7 +415,7 @@ pub enum Collinearity {
 }
 
 #[derive(Clone, Debug)]
-struct PointInfo {
+pub struct PointInfo {
     info: PointInfoLite,
     lines: HashSet<LineId>,
 }
@@ -402,10 +440,11 @@ impl PointInfo {
     }
 }
 
-type PointId = usize;
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct PointId(usize);
 
 #[derive(Clone, Debug)]
-struct Line {
+pub struct Line {
     direction: Point,
     origin: Point,
     points: Vec<LinePoint>,
@@ -414,7 +453,7 @@ struct Line {
 
 impl Line {
     /// Create a new line between the two points.
-    pub fn from_pair(p1: PointInfoLite, p2: PointInfoLite) -> Line {
+    fn from_pair(p1: PointInfoLite, p2: PointInfoLite) -> Line {
         Line {
             direction: p2.value - p1.value,
             origin: p1.value,
@@ -433,7 +472,7 @@ impl Line {
     }
 
     /// Create a new line with the given origin and direction.
-    pub fn from_origin_direction(origin: PointInfoLite, direction: Point) -> Line {
+    fn from_origin_direction(origin: PointInfoLite, direction: Point) -> Line {
         Line {
             origin: origin.value,
             direction,
@@ -469,13 +508,7 @@ impl Line {
     }
 
     /// Registers the given segment with the line.
-    pub fn add_segment(
-        &mut self,
-        p1: PointInfoLite,
-        p2: PointInfoLite,
-        mut offset: isize,
-        width: f64,
-    ) {
+    fn add_segment(&mut self, p1: PointInfoLite, p2: PointInfoLite, mut offset: isize, width: f64) {
         let mut p1 = self.line_point(p1);
         let mut p2 = self.line_point(p2);
         if p1 > p2 {
@@ -807,4 +840,5 @@ impl PartialOrd for LinePoint {
     }
 }
 
-type LineId = usize;
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct LineId(usize);
