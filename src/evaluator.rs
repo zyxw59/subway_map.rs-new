@@ -249,7 +249,7 @@ impl Evaluator {
                                 write!(f, " {}", self.points.u_turn(current, next, line_sep))?;
                             }
                         }
-                        Collinearity::NotColinear => {
+                        Collinearity::NotCollinear => {
                             // corner
                             write!(
                                 f,

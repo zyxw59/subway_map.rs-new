@@ -352,7 +352,7 @@ impl PointCollection {
         let p2_id = self.point_ids[p2];
         let p3_id = self.point_ids[p3];
         if self.pairs[&(p1_id, p2_id)] != self.pairs[&(p2_id, p3_id)] {
-            Collinearity::NotColinear
+            Collinearity::NotCollinear
         } else {
             let line = &self[(p1_id, p2_id)];
             let p1 = line.line_point(self[p1_id].info);
@@ -411,7 +411,7 @@ pub enum Collinearity {
     /// The three points are collinear, but not in order.
     NotSequential,
     /// The three points are not collinear.
-    NotColinear,
+    NotCollinear,
 }
 
 #[derive(Clone, Debug)]
