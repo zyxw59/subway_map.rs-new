@@ -1,12 +1,12 @@
 use std::cmp::Ordering;
 use std::collections::{hash_map::Entry, BTreeSet, HashMap, HashSet};
+use std::io::{Result as IoResult, Write};
 use std::ops::{Index, IndexMut};
 
 use itertools::Itertools;
 
 use crate::corner::{Corner, ParallelShift};
 use crate::error::{EvaluatorError, MathError};
-use crate::evaluator;
 use crate::expressions::Variable;
 use crate::values::Point;
 
@@ -16,6 +16,8 @@ pub struct PointCollection {
     point_ids: HashMap<Variable, PointId>,
     lines: Vec<Line>,
     pairs: HashMap<(PointId, PointId), LineId>,
+    routes: Vec<Route>,
+    route_ids: HashMap<Variable, RouteId>,
 }
 
 impl PointCollection {
@@ -45,23 +47,51 @@ impl PointCollection {
         self.get_point_info(k).map(|info| info.info.line_number)
     }
 
+    /// Inserts a new, empty route, and returns the id of that route; or returns an error if a
+    /// route with that name has already been defined.
+    pub fn insert_route_get_id(
+        &mut self,
+        name: Variable,
+        width: f64,
+        style: Option<Variable>,
+        line_number: usize,
+    ) -> Result<RouteId, EvaluatorError> {
+        match self.route_ids.entry(name) {
+            Entry::Occupied(e) => {
+                let &id = e.get();
+                Err(EvaluatorError::RouteRedefinition(
+                    e.key().clone(),
+                    line_number,
+                    self[id].line_number,
+                ))
+            }
+            Entry::Vacant(e) => {
+                let id = RouteId(self.routes.len());
+                self.routes
+                    .push(Route::new(e.key().clone(), width, style, line_number));
+                e.insert(id);
+                Ok(id)
+            }
+        }
+    }
+
     fn insert_point_get_id(
         &mut self,
         name: Variable,
         value: Point,
         line_number: usize,
     ) -> Result<PointId, EvaluatorError> {
-        let id = PointId(self.points.len());
         match self.point_ids.entry(name) {
             Entry::Occupied(e) => {
-                let &PointId(idx) = e.get();
+                let &id = e.get();
                 Err(EvaluatorError::PointRedefinition(
                     e.key().clone(),
                     line_number,
-                    self.points[idx].info.line_number,
+                    self[id].info.line_number,
                 ))
             }
             Entry::Vacant(e) => {
+                let id = PointId(self.points.len());
                 self.points.push(PointInfo::new(value, id, line_number));
                 e.insert(id);
                 Ok(id)
@@ -197,31 +227,120 @@ impl PointCollection {
         Ok(())
     }
 
-    /// Registers a given segment with the relevant line.
+    /// Appends a given segment to the given route.
     pub fn add_segment<'a>(
         &mut self,
-        segment: &'a evaluator::Segment,
-        width: f64,
+        route: RouteId,
+        start: &'a str,
+        end: &'a str,
+        offset: isize,
     ) -> Result<(), &'a str> {
-        let p1 = self
-            .get_point_info(&segment.start)
-            .ok_or(&*segment.start)?
-            .info;
-        let p2 = self.get_point_info(&segment.end).ok_or(&*segment.end)?.info;
+        let p1 = self.get_point_info(start).ok_or(start)?.info;
+        let p2 = self.get_point_info(end).ok_or(end)?.info;
         let line_id = self.get_or_insert_line(p1.id, p2.id);
-        self[line_id].add_segment(p1, p2, segment.offset, width);
+        self[route].add_segment(p1.id, p2.id, offset);
+        let width = self[route].width;
+        self[line_id].add_segment(p1, p2, offset, width, route);
+        Ok(())
+    }
+
+    pub fn draw_routes(
+        &self,
+        default_width: f64,
+        inner_radius: f64,
+        f: &mut impl Write,
+    ) -> IoResult<()> {
+        for route in &self.routes {
+            self.draw_route(route, default_width, inner_radius, f)?;
+        }
+        Ok(())
+    }
+
+    pub fn draw_route(
+        &self,
+        route: &Route,
+        default_width: f64,
+        inner_radius: f64,
+        f: &mut impl Write,
+    ) -> IoResult<()> {
+        write!(f, "<path")?;
+        write!(f, " id=\"route-{}\"", route.name)?;
+        write!(f, " class=\"route")?;
+        if let Some(style) = &route.style {
+            write!(f, " route-{}", style)?;
+        }
+        write!(f, "\"")?;
+        if route.segments.is_empty() {
+            write!(f, " />")?;
+            return Ok(());
+        }
+        // now on to drawing the route
+        write!(f, " d=\"")?;
+        write!(
+            f,
+            "M {}",
+            self.segment_start(route.segments.first().unwrap(), default_width)
+        )?;
+        for (current, next) in route.segments.iter().tuple_windows() {
+            // process `current` in the loop; `next` will be handled on the next iteration, or
+            // after the loop, for the last segment.
+            for shift in self.parallel_shifts(current, default_width) {
+                write!(f, " {}", shift)?;
+            }
+            if current.end == next.start {
+                match self.are_collinear(current.start, current.end, next.end) {
+                    Collinearity::Sequential => {
+                        // parallel shift
+                        if let Some(shift) = self.parallel_shift(current, next, default_width) {
+                            write!(f, " {}", shift)?;
+                        }
+                    }
+                    Collinearity::NotSequential => {
+                        if current.offset == -next.offset {
+                            // no turn, just a straight line ending.
+                            write!(f, " L {}", self.segment_end(current, default_width))?;
+                        } else {
+                            // u-turn
+                            write!(f, " {}", self.u_turn(current, next, default_width))?;
+                        }
+                    }
+                    Collinearity::NotCollinear => {
+                        // corner
+                        write!(
+                            f,
+                            " {}",
+                            self.corner(current, next, default_width, inner_radius)
+                        )?;
+                    }
+                }
+            } else {
+                // end this line, and move to the start of the next.
+                write!(
+                    f,
+                    " L {} M {}",
+                    self.segment_end(current, default_width),
+                    self.segment_start(next, default_width)
+                )?;
+            }
+        }
+        let current = route.segments.last().unwrap();
+        for shift in self.parallel_shifts(current, default_width) {
+            write!(f, " {}", shift)?;
+        }
+        write!(f, " L {}", self.segment_end(current, default_width))?;
+        writeln!(f, "\" />")?;
         Ok(())
     }
 
     pub fn parallel_shifts(
         &self,
-        segment: &evaluator::Segment,
+        segment: &RouteSegment,
         default_width: f64,
     ) -> impl Iterator<Item = ParallelShift> + '_ {
         // this is only called on segments which have already been added, so we can be sure that
         // all the points mentioned are valid.
-        let start_id = self.point_ids[&segment.start];
-        let end_id = self.point_ids[&segment.end];
+        let start_id = segment.start;
+        let end_id = segment.end;
         let start = self[start_id].info;
         let end = self[end_id].info;
         let line = &self[(start_id, end_id)];
@@ -245,12 +364,12 @@ impl PointCollection {
 
     pub fn parallel_shift(
         &self,
-        segment_in: &evaluator::Segment,
-        segment_out: &evaluator::Segment,
+        segment_in: &RouteSegment,
+        segment_out: &RouteSegment,
         default_width: f64,
     ) -> Option<ParallelShift> {
-        let start_id = self.point_ids[&segment_in.start];
-        let end_id = self.point_ids[&segment_in.end];
+        let start_id = segment_in.start;
+        let end_id = segment_in.end;
         let start = self[start_id].info;
         let end = self[end_id].info;
         let line = &self[(start_id, end_id)];
@@ -271,12 +390,12 @@ impl PointCollection {
 
     pub fn u_turn(
         &self,
-        segment_in: &evaluator::Segment,
-        segment_out: &evaluator::Segment,
+        segment_in: &RouteSegment,
+        segment_out: &RouteSegment,
         default_width: f64,
     ) -> Corner {
-        let start_id = self.point_ids[&segment_in.start];
-        let end_id = self.point_ids[&segment_in.end];
+        let start_id = segment_in.start;
+        let end_id = segment_in.end;
         let start = self[start_id].info;
         let end = self[end_id].info;
         let line = &self[(start_id, end_id)];
@@ -288,14 +407,14 @@ impl PointCollection {
 
     pub fn corner(
         &self,
-        segment_in: &evaluator::Segment,
-        segment_out: &evaluator::Segment,
+        segment_in: &RouteSegment,
+        segment_out: &RouteSegment,
         default_width: f64,
         inner_radius: f64,
     ) -> Corner {
-        let start_id = self.point_ids[&segment_in.start];
-        let corner_id = self.point_ids[&segment_in.end];
-        let end_id = self.point_ids[&segment_out.end];
+        let start_id = segment_in.start;
+        let corner_id = segment_in.end;
+        let end_id = segment_out.end;
         let start = self[start_id].info;
         let corner = self[corner_id].info;
         let end = self[end_id].info;
@@ -324,22 +443,22 @@ impl PointCollection {
         .offset(offset_in, offset_out)
     }
 
-    pub fn segment_start(&self, segment: &evaluator::Segment, default_width: f64) -> Point {
+    pub fn segment_start(&self, segment: &RouteSegment, default_width: f64) -> Point {
         self.segment_start_or_end(segment, true, default_width)
     }
 
-    pub fn segment_end(&self, segment: &evaluator::Segment, default_width: f64) -> Point {
+    pub fn segment_end(&self, segment: &RouteSegment, default_width: f64) -> Point {
         self.segment_start_or_end(segment, false, default_width)
     }
 
     fn segment_start_or_end(
         &self,
-        segment: &evaluator::Segment,
+        segment: &RouteSegment,
         is_start: bool,
         default_width: f64,
     ) -> Point {
-        let start_id = self.point_ids[&segment.start];
-        let end_id = self.point_ids[&segment.end];
+        let start_id = segment.start;
+        let end_id = segment.end;
         let mut start = self[start_id].info;
         let mut end = self[end_id].info;
         let line = &self[(start_id, end_id)];
@@ -357,19 +476,16 @@ impl PointCollection {
         line.direction.unit().perp().mul_add(-offset, end.value)
     }
 
-    pub fn are_collinear(&self, p1: &str, p2: &str, p3: &str) -> Collinearity {
+    pub fn are_collinear(&self, p1: PointId, p2: PointId, p3: PointId) -> Collinearity {
         // this is only called on segments which have already been added, so we can be sure that
         // all the points mentioned are valid.
-        let p1_id = self.point_ids[p1];
-        let p2_id = self.point_ids[p2];
-        let p3_id = self.point_ids[p3];
-        if self.pairs[&(p1_id, p2_id)] != self.pairs[&(p2_id, p3_id)] {
+        if self.pairs[&(p1, p2)] != self.pairs[&(p2, p3)] {
             Collinearity::NotCollinear
         } else {
-            let line = &self[(p1_id, p2_id)];
-            let p1 = line.line_point(self[p1_id].info);
-            let p2 = line.line_point(self[p2_id].info);
-            let p3 = line.line_point(self[p3_id].info);
+            let line = &self[(p1, p2)];
+            let p1 = line.line_point(self[p1].info);
+            let p2 = line.line_point(self[p2].info);
+            let p3 = line.line_point(self[p3].info);
             if p1 <= p2 && p2 <= p3 || p3 <= p2 && p2 <= p1 {
                 Collinearity::Sequential
             } else {
@@ -412,6 +528,20 @@ impl Index<(PointId, PointId)> for PointCollection {
 
     fn index(&self, (p1, p2): (PointId, PointId)) -> &Line {
         &self[self.pairs[&(p1, p2)]]
+    }
+}
+
+impl Index<RouteId> for PointCollection {
+    type Output = Route;
+
+    fn index(&self, RouteId(idx): RouteId) -> &Route {
+        &self.routes[idx]
+    }
+}
+
+impl IndexMut<RouteId> for PointCollection {
+    fn index_mut(&mut self, RouteId(idx): RouteId) -> &mut Route {
+        &mut self.routes[idx]
     }
 }
 
@@ -522,7 +652,14 @@ impl Line {
     }
 
     /// Registers the given segment with the line.
-    fn add_segment(&mut self, p1: PointInfoLite, p2: PointInfoLite, mut offset: isize, width: f64) {
+    fn add_segment(
+        &mut self,
+        p1: PointInfoLite,
+        p2: PointInfoLite,
+        mut offset: isize,
+        width: f64,
+        route_id: RouteId,
+    ) {
         let mut p1 = self.line_point(p1);
         let mut p2 = self.line_point(p2);
         if p1 > p2 {
@@ -543,13 +680,13 @@ impl Line {
                 } else {
                     p2
                 };
-                Some(Segment::new(p1, end_point, offset, width))
+                Some(Segment::new(p1, end_point, offset, width, route_id))
             }
         };
         let post_split = match end_seg {
             Ok(end) => self.segments[end]
                 .split(p2)
-                .map(|seg| seg.update_new(offset, width)),
+                .map(|seg| seg.update_new(offset, width, route_id)),
             Err(end) => {
                 let start_point = if end > 0 {
                     self.segments[end - 1].end.max(p1)
@@ -559,7 +696,7 @@ impl Line {
                 if start_point == p2 {
                     None
                 } else {
-                    Some(Segment::new(start_point, p2, offset, width))
+                    Some(Segment::new(start_point, p2, offset, width, route_id))
                 }
             }
         };
@@ -567,7 +704,7 @@ impl Line {
         let end = end_seg.unwrap_or_else(|err| err);
         // update the intermediate segments
         for seg in &mut self.segments[start..end] {
-            seg.update(offset, width);
+            seg.update(offset, width, route_id);
         }
         // insert the new segments if necessary
         // NOTE: followup to check for bugs
@@ -658,19 +795,27 @@ impl Line {
 struct Segment {
     start: LinePoint,
     end: LinePoint,
+    routes: HashSet<RouteId>,
     pos_offsets: Vec<Option<f64>>,
     neg_offsets: Vec<Option<f64>>,
 }
 
 impl Segment {
-    pub fn new(start: LinePoint, end: LinePoint, offset: isize, width: f64) -> Segment {
+    pub fn new(
+        start: LinePoint,
+        end: LinePoint,
+        offset: isize,
+        width: f64,
+        route_id: RouteId,
+    ) -> Segment {
         Segment {
             start,
             end,
+            routes: HashSet::new(),
             pos_offsets: Vec::new(),
             neg_offsets: Vec::new(),
         }
-        .update_new(offset, width)
+        .update_new(offset, width, route_id)
     }
 
     pub fn calculate_offset(&self, offset: isize, reverse: bool, default_width: f64) -> f64 {
@@ -776,13 +921,13 @@ impl Segment {
     }
 
     /// Update the segment with the given `offset` and `width`, returning the new segment
-    fn update_new(mut self, offset: isize, width: f64) -> Segment {
-        self.update(offset, width);
+    fn update_new(mut self, offset: isize, width: f64, route_id: RouteId) -> Segment {
+        self.update(offset, width, route_id);
         self
     }
 
     /// Update the segment with the given `offset` and `width`.
-    fn update(&mut self, offset: isize, width: f64) {
+    fn update(&mut self, offset: isize, width: f64, route_id: RouteId) {
         if offset >= 0 {
             let offset = offset as usize;
             if offset >= self.pos_offsets.len() {
@@ -798,6 +943,7 @@ impl Segment {
             self.neg_offsets[offset] =
                 Some(self.neg_offsets[offset].map_or(width, |old| old.max(width)));
         }
+        self.routes.insert(route_id);
     }
 
     fn cmp(&self, other: &LinePoint) -> Ordering {
@@ -856,6 +1002,47 @@ impl PartialOrd for LinePoint {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct LineId(usize);
+
+#[derive(Clone, Debug)]
+pub struct Route {
+    /// The name of the route.
+    name: Variable,
+    /// The width of the route line.
+    width: f64,
+    /// The style (if any) for the route.
+    style: Option<Variable>,
+    /// The segments making up the route.
+    segments: Vec<RouteSegment>,
+    /// The number of the line where the route is defined.
+    line_number: usize,
+}
+
+impl Route {
+    fn new(name: Variable, width: f64, style: Option<Variable>, line_number: usize) -> Route {
+        Route {
+            name,
+            width,
+            style,
+            segments: Vec::new(),
+            line_number,
+        }
+    }
+
+    fn add_segment(&mut self, start: PointId, end: PointId, offset: isize) {
+        self.segments.push(RouteSegment { start, end, offset });
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct RouteId(usize);
+
+#[derive(Clone, Copy, Debug)]
+/// A segment of a route.
+pub struct RouteSegment {
+    pub start: PointId,
+    pub end: PointId,
+    pub offset: isize,
+}
 
 #[cfg(test)]
 mod tests {
