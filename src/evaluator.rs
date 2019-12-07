@@ -67,7 +67,7 @@ impl Evaluator {
                     .evaluate(self)
                     .and_then(Point::try_from)
                     .map_err(|err| EvaluatorError::Math(err, line))?;
-                self.points.insert_point(name, value, line);
+                self.points.insert_point(name, value, line)?;
             }
             StatementKind::PointSpaced {
                 from,
@@ -81,49 +81,34 @@ impl Evaluator {
                 if !self.points.contains(&from) {
                     return Err(EvaluatorError::Math(MathError::Variable(from), line).into());
                 }
-                let mut total_distance = 0.0;
-                let mut distances = Vec::new();
-                for (multiplier, name) in points {
-                    // check for redefinition of point
-                    if let Some(original_line) = self.points.get_point_line_number(&name) {
-                        return Err(
-                            EvaluatorError::PointRedefinition(name, line, original_line).into()
-                        );
-                    }
-                    total_distance += multiplier
-                        .map(|expr| expr.evaluate(self).and_then(f64::try_from))
-                        .unwrap_or(Ok(1.0))
-                        .map_err(|err| EvaluatorError::Math(err, line))?;
-                    distances.push((name, total_distance));
-                }
-                self.points.new_line(from, spacing, distances, line);
+                let points = points
+                    .into_iter()
+                    .map(|(multiplier, name)| {
+                        multiplier
+                            .map(|expr| expr.evaluate(self).and_then(f64::try_from))
+                            .unwrap_or(Ok(1.0))
+                            .map_err(|err| EvaluatorError::Math(err, line))
+                            .map(|distance| (name, distance))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                self.points.new_line(from, spacing, points, line)?;
             }
             StatementKind::PointBetween {
                 from,
                 to: (to_multiplier, to),
                 points,
             } => {
-                if !self.points.contains(&from) {
-                    return Err(EvaluatorError::Math(MathError::Variable(from), line).into());
-                }
-                if !self.points.contains(&to) {
-                    return Err(EvaluatorError::Math(MathError::Variable(to), line).into());
-                }
                 let mut total_distance = 0.0;
-                let mut distances = Vec::new();
-                for (multiplier, name) in points {
-                    // check for redefinition of point
-                    if let Some(original_line) = self.points.get_point_line_number(&name) {
-                        return Err(
-                            EvaluatorError::PointRedefinition(name, line, original_line).into()
-                        );
-                    }
-                    total_distance += multiplier
-                        .map(|expr| expr.evaluate(self).and_then(f64::try_from))
-                        .unwrap_or(Ok(1.0))
-                        .map_err(|err| EvaluatorError::Math(err, line))?;
-                    distances.push((name, total_distance));
-                }
+                let points = points
+                    .into_iter()
+                    .map(|(multiplier, name)| {
+                        total_distance += multiplier
+                            .map(|expr| expr.evaluate(self).and_then(f64::try_from))
+                            .unwrap_or(Ok(1.0))
+                            .map_err(|err| EvaluatorError::Math(err, line))?;
+                        Ok((name, total_distance))
+                    })
+                    .collect::<Result<Vec<_>, EvaluatorError>>()?;
                 total_distance += to_multiplier
                     .map(|expr| expr.evaluate(self).and_then(f64::try_from))
                     .unwrap_or(Ok(1.0))
@@ -131,11 +116,11 @@ impl Evaluator {
                 self.points.extend_line(
                     from,
                     to,
-                    distances
+                    points
                         .into_iter()
                         .map(|(name, distance)| (name, distance / total_distance)),
                     line,
-                );
+                )?;
             }
             StatementKind::Route {
                 name,

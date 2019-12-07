@@ -1,10 +1,11 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, BTreeSet, HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use itertools::Itertools;
 
 use crate::corner::{Corner, ParallelShift};
+use crate::error::{EvaluatorError, MathError};
 use crate::evaluator;
 use crate::expressions::Variable;
 use crate::values::Point;
@@ -44,18 +45,28 @@ impl PointCollection {
         self.get_point_info(k).map(|info| info.info.line_number)
     }
 
-    /// This is an associated function so that it can work with partial borrows of `self`
     fn insert_point_get_id(
-        points: &mut Vec<PointInfo>,
-        point_ids: &mut HashMap<Variable, PointId>,
+        &mut self,
         name: Variable,
         value: Point,
         line_number: usize,
-    ) -> PointId {
-        let id = PointId(points.len());
-        points.push(PointInfo::new(value, id, line_number));
-        point_ids.insert(name, id);
-        id
+    ) -> Result<PointId, EvaluatorError> {
+        let id = PointId(self.points.len());
+        match self.point_ids.entry(name) {
+            Entry::Occupied(e) => {
+                let &PointId(idx) = e.get();
+                Err(EvaluatorError::PointRedefinition(
+                    e.key().clone(),
+                    line_number,
+                    self.points[idx].info.line_number,
+                ))
+            }
+            Entry::Vacant(e) => {
+                self.points.push(PointInfo::new(value, id, line_number));
+                e.insert(id);
+                Ok(id)
+            }
+        }
     }
 
     /// Returns a `LineId` so that `self` isn't mutably borrowed
@@ -95,14 +106,15 @@ impl PointCollection {
         }
     }
 
-    pub fn insert_point(&mut self, name: Variable, value: Point, line_number: usize) {
-        Self::insert_point_get_id(
-            &mut self.points,
-            &mut self.point_ids,
-            name,
-            value,
-            line_number,
-        );
+    /// Inserts the point, or if the point already exists, return a point redefinition error.
+    pub fn insert_point(
+        &mut self,
+        name: Variable,
+        value: Point,
+        line_number: usize,
+    ) -> Result<(), EvaluatorError> {
+        self.insert_point_get_id(name, value, line_number)
+            .map(|_| ())
     }
 
     fn add_pair(&mut self, p1: PointId, p2: PointId, line: LineId) {
@@ -112,33 +124,42 @@ impl PointCollection {
         self[p2].lines.insert(line);
     }
 
+    /// Creates a new line from a start point, a direction, and (name, distance) pairs along the
+    /// line for new points to create.
+    ///
+    /// Because only one existing point is referenced, this necessarily creates a new line.
     pub fn new_line(
         &mut self,
         start_point: Variable,
         direction: Point,
         points: impl IntoIterator<Item = (Variable, f64)>,
         line_number: usize,
-    ) {
+    ) -> Result<(), EvaluatorError> {
         let line_id = LineId(self.lines.len());
-        let start_id = self.point_ids[&start_point];
+        let &start_id = self
+            .point_ids
+            .get(&start_point)
+            .ok_or(EvaluatorError::Math(
+                MathError::Variable(start_point),
+                line_number,
+            ))?;
         let origin = self[start_id].info;
         let mut line = Line::from_origin_direction(origin, direction);
-        line.points
-            .extend(points.into_iter().map(|(name, distance)| {
-                let point = distance * direction + origin.value;
-                let id = Self::insert_point_get_id(
-                    &mut self.points,
-                    &mut self.point_ids,
-                    name,
-                    point,
-                    line_number,
-                );
-                LinePoint { id, distance }
-            }));
+        let mut total_distance = 0.0;
+        for (name, distance) in points {
+            total_distance += distance;
+            let point = total_distance * direction + origin.value;
+            let id = self.insert_point_get_id(name, point, line_number)?;
+            line.points.insert(LinePoint {
+                id,
+                distance: total_distance,
+            });
+        }
         for (&p1, &p2) in line.points.iter().tuple_combinations() {
             self.add_pair(p1.id, p2.id, line_id);
         }
         self.lines.push(line);
+        Ok(())
     }
 
     /// Extends the line specified by the given points, with intermediate points indicated as a
@@ -149,7 +170,7 @@ impl PointCollection {
         end_point: Variable,
         points: impl IntoIterator<Item = (Variable, f64)>,
         line_number: usize,
-    ) {
+    ) -> Result<(), EvaluatorError> {
         let start_id = self.point_ids[&start_point];
         let end_id = self.point_ids[&end_point];
         let line_id = self.get_or_insert_line(start_id, end_id);
@@ -160,29 +181,20 @@ impl PointCollection {
             let line = &self[line_id];
             (line.distance(start), line.relative_distance(start, end))
         };
-        let self_points = &mut self.points;
-        let self_point_ids = &mut self.point_ids;
-        let new_points = points
-            .into_iter()
-            .map(|(name, distance)| {
-                let id = Self::insert_point_get_id(
-                    self_points,
-                    self_point_ids,
-                    name,
-                    distance * direction + start,
-                    line_number,
-                );
-                LinePoint {
-                    id,
-                    distance: distance * distance_scale + start_distance,
-                }
-            })
-            .merge(self.lines[line_id.0].points.iter().copied())
-            .collect::<Vec<_>>();
-        for (&p1, &p2) in new_points.iter().tuple_combinations() {
-            self.add_pair(p1.id, p2.id, line_id);
+        for (name, distance) in points {
+            let id = self.insert_point_get_id(name, distance * direction + start, line_number)?;
+            self[line_id].points.insert(LinePoint {
+                id,
+                distance: distance * distance_scale + start_distance,
+            });
         }
-        self[line_id].points = new_points;
+        for (&p1, &p2) in self.lines[line_id.0].points.iter().tuple_combinations() {
+            self.pairs.insert((p1.id, p2.id), line_id);
+            self.pairs.insert((p2.id, p1.id), line_id);
+            self.points[p1.id.0].lines.insert(line_id);
+            self.points[p2.id.0].lines.insert(line_id);
+        }
+        Ok(())
     }
 
     /// Registers a given segment with the relevant line.
@@ -447,39 +459,41 @@ pub struct PointId(usize);
 pub struct Line {
     direction: Point,
     origin: Point,
-    points: Vec<LinePoint>,
+    points: BTreeSet<LinePoint>,
     segments: Vec<Segment>,
 }
 
 impl Line {
     /// Create a new line between the two points.
     fn from_pair(p1: PointInfoLite, p2: PointInfoLite) -> Line {
+        let mut points = BTreeSet::new();
+        points.insert(LinePoint {
+            distance: 0.0,
+            id: p1.id,
+        });
+        points.insert(LinePoint {
+            distance: 1.0,
+            id: p2.id,
+        });
         Line {
             direction: p2.value - p1.value,
             origin: p1.value,
-            points: vec![
-                LinePoint {
-                    distance: 0.0,
-                    id: p1.id,
-                },
-                LinePoint {
-                    distance: 1.0,
-                    id: p2.id,
-                },
-            ],
+            points,
             segments: Vec::new(),
         }
     }
 
     /// Create a new line with the given origin and direction.
     fn from_origin_direction(origin: PointInfoLite, direction: Point) -> Line {
+        let mut points = BTreeSet::new();
+        points.insert(LinePoint {
+            distance: 0.0,
+            id: origin.id,
+        });
         Line {
             origin: origin.value,
             direction,
-            points: vec![LinePoint {
-                distance: 0.0,
-                id: origin.id,
-            }],
+            points,
             segments: Vec::new(),
         }
     }
@@ -842,3 +856,76 @@ impl PartialOrd for LinePoint {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct LineId(usize);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extend_line_in_order() {
+        let mut points = PointCollection::new();
+        points.insert_point("A".into(), Point(0.0, 0.0), 0).unwrap();
+        points.insert_point("B".into(), Point(2.0, 0.0), 1).unwrap();
+        points
+            .extend_line(
+                "A".into(),
+                "B".into(),
+                vec![("C".into(), 0.1), ("D".into(), 0.5)],
+                2,
+            )
+            .unwrap();
+        let a_id = points.point_ids["A"];
+        let b_id = points.point_ids["B"];
+        let line = &points[(a_id, b_id)];
+        assert_eq!(line.direction, Point(2.0, 0.0));
+        assert_eq!(
+            line.points.iter().map(|p| p.distance).collect::<Vec<_>>(),
+            &[0.0, 0.1, 0.5, 1.0]
+        );
+    }
+
+    #[test]
+    fn extend_line_in_reverse_order() {
+        let mut points = PointCollection::new();
+        points.insert_point("A".into(), Point(0.0, 0.0), 0).unwrap();
+        points.insert_point("B".into(), Point(2.0, 0.0), 1).unwrap();
+        points
+            .extend_line(
+                "A".into(),
+                "B".into(),
+                vec![("C".into(), 0.5), ("D".into(), 0.1)],
+                2,
+            )
+            .unwrap();
+        let a_id = points.point_ids["A"];
+        let b_id = points.point_ids["B"];
+        let line = &points[(a_id, b_id)];
+        assert_eq!(line.direction, Point(2.0, 0.0));
+        assert_eq!(
+            line.points.iter().map(|p| p.distance).collect::<Vec<_>>(),
+            &[0.0, 0.1, 0.5, 1.0]
+        );
+    }
+
+    #[test]
+    fn new_line() {
+        let mut points = PointCollection::new();
+        points.insert_point("A".into(), Point(0.0, 0.0), 0).unwrap();
+        points
+            .new_line(
+                "A".into(),
+                Point(2.0, 0.0),
+                vec![("B".into(), 1.0), ("C".into(), 0.5), ("D".into(), 1.0)],
+                2,
+            )
+            .unwrap();
+        let a_id = points.point_ids["A"];
+        let b_id = points.point_ids["B"];
+        let line = &points[(a_id, b_id)];
+        assert_eq!(line.direction, Point(2.0, 0.0));
+        assert_eq!(
+            line.points.iter().map(|p| p.distance).collect::<Vec<_>>(),
+            &[0.0, 1.0, 1.5, 2.5]
+        );
+    }
+}
