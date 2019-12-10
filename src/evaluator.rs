@@ -5,7 +5,7 @@ use std::io::{Result as IoResult, Write};
 use crate::error::{EvaluatorError, MathError, Result as EResult};
 use crate::expressions::{Function, Variable};
 use crate::points::PointCollection;
-use crate::statement::{Statement, StatementKind, Stop};
+use crate::statement::{Statement, StatementKind};
 use crate::values::{Point, Value};
 
 pub trait EvaluationContext {
@@ -148,8 +148,8 @@ impl Evaluator {
                         })?;
                 }
             }
-            _ => {
-                //unimplemented!();
+            StatementKind::Stop(stop) => {
+                self.points.add_stop(stop, line)?;
             }
         }
         Ok(())
@@ -169,6 +169,16 @@ impl Evaluator {
             .and_then(Value::as_number)
             .unwrap_or(0.0);
         self.points.draw_routes(line_sep, inner_radius, f)
+    }
+
+    pub fn draw_stops(&self, f: &mut impl Write) -> IoResult<()> {
+        let line_sep = self
+            .variables
+            .get("line_sep")
+            .copied()
+            .and_then(Value::as_number)
+            .unwrap_or(1.0);
+        self.points.draw_stops(line_sep, f)
     }
 
     pub fn draw_points(&self, f: &mut impl Write) -> IoResult<()> {

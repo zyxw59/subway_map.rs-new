@@ -8,6 +8,7 @@ use itertools::Itertools;
 use crate::corner::{Corner, ParallelShift};
 use crate::error::{EvaluatorError, MathError};
 use crate::expressions::Variable;
+use crate::statement;
 use crate::values::Point;
 
 #[derive(Default, Debug)]
@@ -18,6 +19,7 @@ pub struct PointCollection {
     pairs: HashMap<(PointId, PointId), LineId>,
     routes: Vec<Route>,
     route_ids: HashMap<Variable, RouteId>,
+    stops: Vec<Stop>,
 }
 
 impl PointCollection {
@@ -244,6 +246,96 @@ impl PointCollection {
         Ok(())
     }
 
+    pub fn add_stop(
+        &mut self,
+        statement::Stop {
+            point,
+            style,
+            routes,
+            label,
+        }: statement::Stop,
+        line_number: usize,
+    ) -> Result<(), EvaluatorError> {
+        let point = *self.point_ids.get(&point).ok_or(EvaluatorError::Math(
+            MathError::Variable(point),
+            line_number,
+        ))?;
+        let routes = routes
+            .map(|vec| {
+                vec.into_iter()
+                    .map(|rte| {
+                        self.route_ids
+                            .get(&rte)
+                            .copied()
+                            .ok_or(EvaluatorError::Math(MathError::Variable(rte), line_number))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()?;
+        self.stops.push(Stop {
+            point,
+            style,
+            routes,
+            label,
+        });
+        Ok(())
+    }
+
+    pub fn draw_stops(&self, default_width: f64, f: &mut impl Write) -> IoResult<()> {
+        for stop in &self.stops {
+            self.draw_stop(stop, default_width, f)?;
+        }
+        Ok(())
+    }
+
+    fn draw_stop(&self, stop: &Stop, default_width: f64, f: &mut impl Write) -> IoResult<()> {
+        // just put a circle at the stop for now
+        // TODO: More complicated stop icons
+        // TODO: Stop labels
+        // step 0: get the point info from the stop
+        let point = &self[stop.point];
+        // step 1: get the locations of all the points to place stop markers.
+        let mut points_and_routes: Vec<(Point, RouteId)> = Vec::new();
+        for &line_id in &point.lines {
+            let line = &self[line_id];
+            let segments = line.get_segments_containing_point(point.info);
+            for seg in segments.iter().flatten() {
+                for &(route_id, offset) in &seg.routes {
+                    if stop
+                        .routes
+                        .as_ref()
+                        .map(|routes| routes.contains(&route_id))
+                        .unwrap_or(true)
+                    {
+                        let offset = seg.calculate_offset(offset, false, default_width);
+                        let dir = line.direction;
+                        points_and_routes.push((
+                            (-dir.unit().perp()).mul_add(offset, point.info.value),
+                            route_id,
+                        ));
+                    }
+                }
+            }
+        }
+        // step 2: draw the stop icons
+        for (point, route) in points_and_routes {
+            let route = &self[route];
+            write!(
+                f,
+                "<circle cx=\"{}\" cy=\"{}\" r=\"{}\"",
+                point.0,
+                point.1,
+                route.width / 2.0
+            )?;
+            write!(f, " class=\"stop")?;
+            if let Some(style) = &route.style {
+                write!(f, " stop-{}", style)?;
+            }
+            writeln!(f, "\" />")?;
+        }
+        Ok(())
+    }
+
     pub fn draw_routes(
         &self,
         default_width: f64,
@@ -256,7 +348,7 @@ impl PointCollection {
         Ok(())
     }
 
-    pub fn draw_route(
+    fn draw_route(
         &self,
         route: &Route,
         default_width: f64,
@@ -784,6 +876,29 @@ impl Line {
         (reverse, &self.segments[idx])
     }
 
+    fn get_segments_containing_point(&self, point: PointInfoLite) -> [Option<&Segment>; 2] {
+        let point = self.line_point(point);
+        let idx = self
+            .segments
+            .binary_search_by(|seg| seg.cmp(&point))
+            .unwrap_or_else(|idx| idx);
+        [
+            // the first segment returned is the segment ending at `point`, if it exists
+            if idx > 0 && self.segments[idx - 1].end == point {
+                Some(&self.segments[idx - 1])
+            } else {
+                None
+            },
+            // the second segment returned is the segment with
+            // `segment.start <= point < segment.end`, if it exists
+            if idx < self.segments.len() && self.segments[idx] == point {
+                Some(&self.segments[idx])
+            } else {
+                None
+            },
+        ]
+    }
+
     /// True if the line is to the right of the specified point (looking in the direction of
     /// `line.direction`.
     fn right_of(&self, point: Point) -> bool {
@@ -795,7 +910,7 @@ impl Line {
 struct Segment {
     start: LinePoint,
     end: LinePoint,
-    routes: HashSet<RouteId>,
+    routes: Vec<(RouteId, isize)>,
     pos_offsets: Vec<Option<f64>>,
     neg_offsets: Vec<Option<f64>>,
 }
@@ -811,7 +926,7 @@ impl Segment {
         Segment {
             start,
             end,
-            routes: HashSet::new(),
+            routes: Vec::new(),
             pos_offsets: Vec::new(),
             neg_offsets: Vec::new(),
         }
@@ -943,7 +1058,7 @@ impl Segment {
             self.neg_offsets[offset] =
                 Some(self.neg_offsets[offset].map_or(width, |old| old.max(width)));
         }
-        self.routes.insert(route_id);
+        self.routes.push((route_id, offset));
     }
 
     fn cmp(&self, other: &LinePoint) -> Ordering {
@@ -960,6 +1075,12 @@ impl Segment {
 impl PartialEq for Segment {
     fn eq(&self, other: &Self) -> bool {
         self.start == other.start && self.end == other.end
+    }
+}
+
+impl PartialEq<LinePoint> for Segment {
+    fn eq(&self, other: &LinePoint) -> bool {
+        self.cmp(other) == Ordering::Equal
     }
 }
 
@@ -1036,12 +1157,25 @@ impl Route {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct RouteId(usize);
 
-#[derive(Clone, Copy, Debug)]
 /// A segment of a route.
+#[derive(Clone, Copy, Debug)]
 pub struct RouteSegment {
     pub start: PointId,
     pub end: PointId,
     pub offset: isize,
+}
+
+/// A stop.
+#[derive(Clone, Debug)]
+pub struct Stop {
+    /// The location of the stop.
+    pub point: PointId,
+    /// The style of the stop.
+    pub style: Option<Variable>,
+    /// The set of routes which stop at the stop, or `None` if all lines stop.
+    pub routes: Option<Vec<RouteId>>,
+    /// The label.
+    pub label: Option<statement::Label>,
 }
 
 #[cfg(test)]
@@ -1113,6 +1247,46 @@ mod tests {
         assert_eq!(
             line.points.iter().map(|p| p.distance).collect::<Vec<_>>(),
             &[0.0, 1.0, 1.5, 2.5]
+        );
+    }
+
+    #[test]
+    fn segments_containing_point() {
+        let mut points = PointCollection::new();
+        points.insert_point("A".into(), Point(0.0, 0.0), 0).unwrap();
+        points
+            .new_line(
+                "A".into(),
+                Point(2.0, 0.0),
+                vec![("B".into(), 1.0), ("C".into(), 0.5), ("D".into(), 1.0)],
+                2,
+            )
+            .unwrap();
+        let route = points
+            .insert_route_get_id("red".into(), 1.0, None, 3)
+            .unwrap();
+        points.add_segment(route, "A", "B", 0).unwrap();
+        points.add_segment(route, "B", "D", 0).unwrap();
+        let a_id = points.point_ids["A"];
+        let b_id = points.point_ids["B"];
+        let c_id = points.point_ids["C"];
+        let d_id = points.point_ids["D"];
+        let line = &points[(a_id, b_id)];
+        assert_eq!(
+            line.get_segments_containing_point(points[a_id].info),
+            [None, Some(&line.segments[0])]
+        );
+        assert_eq!(
+            line.get_segments_containing_point(points[b_id].info),
+            [Some(&line.segments[0]), Some(&line.segments[1])]
+        );
+        assert_eq!(
+            line.get_segments_containing_point(points[c_id].info),
+            [None, Some(&line.segments[1])]
+        );
+        assert_eq!(
+            line.get_segments_containing_point(points[d_id].info),
+            [Some(&line.segments[1]), None]
         );
     }
 }

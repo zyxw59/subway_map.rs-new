@@ -36,7 +36,7 @@ xmlns:xlink="http://www.w3.org/1999/xlink">
         .map_err(error::EvaluatorError::Io)?;
     println!("</g>");
     evaluator
-        .draw_points(&mut stdout.lock())
+        .draw_stops(&mut stdout.lock())
         .map_err(error::EvaluatorError::Io)?;
     println!("</svg>");
     Ok(())
