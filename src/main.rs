@@ -3,6 +3,7 @@ use std::io;
 #[macro_use]
 mod macros;
 mod corner;
+mod document;
 mod error;
 pub mod evaluator;
 mod expressions;
@@ -20,24 +21,17 @@ fn main() -> Result<(), error::Error> {
     let parser = lexer::Lexer::new(stdin.lock()).into_parser();
     let mut evaluator = evaluator::Evaluator::new();
     evaluator.evaluate_all(parser)?;
-    //println!("{:#?}", evaluator);
+    let mut document = document::Document::new();
+    evaluator.draw_routes(&mut document);
+    evaluator.draw_stops(&mut document);
+    let document = document
+        .compile()
+        .set("width", 1200)
+        .set("height", 1200)
+        .set("viewBox", (-200, 0, 1000, 1200));
     let stdout = io::stdout();
-    println!(
-        r#"<?xml version="1.0" encoding="utf-8" ?>
-<?xml-stylesheet type="text/css" href="test.css"?>
-<svg width="1100" height="1200"
-viewBox="-200, 0 900, 1200"
-xmlns="http://www.w3.org/2000/svg"
-xmlns:xlink="http://www.w3.org/1999/xlink">
-<g fill="none" stroke-width="8">"#
-    );
-    evaluator
-        .draw_routes(&mut stdout.lock())
-        .map_err(error::EvaluatorError::Io)?;
-    println!("</g>");
-    evaluator
-        .draw_stops(&mut stdout.lock())
-        .map_err(error::EvaluatorError::Io)?;
-    println!("</svg>");
+    println!(r#"<?xml version="1.0" encoding="utf-8" ?>"#);
+    println!(r#"<?xml-stylesheet type="text/css" href="test.css"?>"#);
+    svg::write(&mut stdout.lock(), &document).map_err(error::EvaluatorError::Io)?;
     Ok(())
 }

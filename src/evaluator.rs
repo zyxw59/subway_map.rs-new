@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::io::{Result as IoResult, Write};
 
+use crate::document::Document;
 use crate::error::{EvaluatorError, MathError, Result as EResult};
 use crate::expressions::{Function, Variable};
 use crate::points::PointCollection;
@@ -155,7 +155,7 @@ impl Evaluator {
         Ok(())
     }
 
-    pub fn draw_routes(&self, f: &mut impl Write) -> IoResult<()> {
+    pub fn draw_routes(&self, document: &mut Document) {
         let line_sep = self
             .variables
             .get("line_sep")
@@ -168,24 +168,17 @@ impl Evaluator {
             .copied()
             .and_then(Value::as_number)
             .unwrap_or(0.0);
-        self.points.draw_routes(line_sep, inner_radius, f)
+        self.points.draw_routes(line_sep, inner_radius, document);
     }
 
-    pub fn draw_stops(&self, f: &mut impl Write) -> IoResult<()> {
+    pub fn draw_stops(&self, document: &mut Document) {
         let line_sep = self
             .variables
             .get("line_sep")
             .copied()
             .and_then(Value::as_number)
             .unwrap_or(1.0);
-        self.points.draw_stops(line_sep, f)
-    }
-
-    pub fn draw_points(&self, f: &mut impl Write) -> IoResult<()> {
-        for p in self.points.point_iter() {
-            writeln!(f, "<circle cx=\"{:.4}\" cy=\"{:.4}\" r=\"1\" />", p.0, p.1)?;
-        }
-        Ok(())
+        self.points.draw_stops(line_sep, document)
     }
 }
 

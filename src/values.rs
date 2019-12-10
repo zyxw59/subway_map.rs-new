@@ -3,6 +3,8 @@ use std::fmt;
 use std::ops;
 use std::result;
 
+use svg::node::element::path::Parameters;
+
 use crate::error::{MathError, Type};
 
 pub type Result = result::Result<Value, MathError>;
@@ -155,6 +157,12 @@ impl TryFrom<Value> for f64 {
 impl From<Point> for Value {
     fn from(point: Point) -> Value {
         Value::Point(point.0, point.1)
+    }
+}
+
+impl From<Point> for Parameters {
+    fn from(point: Point) -> Parameters {
+        Parameters::from((point.0, point.1))
     }
 }
 

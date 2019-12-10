@@ -1,4 +1,4 @@
-use std::fmt;
+use svg::node::element::path::Data;
 
 use crate::values::Point;
 
@@ -63,18 +63,17 @@ impl Corner {
             end: perp.mul_add(-offset_out, corner),
         }
     }
-}
 
-impl fmt::Display for Corner {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            " L {start} A {radius:.4},{radius:.4} 0 0 {sweep} {end}",
-            start = self.start,
-            radius = self.radius,
-            sweep = self.sweep as u8,
-            end = self.end,
-        )
+    /// Appends the corner to the given `Data`.
+    pub fn apply(&self, data: Data) -> Data {
+        data.line_to(self.start).elliptical_arc_to((
+            self.radius,
+            self.radius,
+            0,
+            0,
+            self.sweep as u8,
+            self.end,
+        ))
     }
 }
 
@@ -93,10 +92,10 @@ impl ParallelShift {
             at + dir.basis(delta, -offset_out),
         )
     }
-}
 
-impl fmt::Display for ParallelShift {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, " L {} C {} {} {}", self.0, self.1, self.2, self.3)
+    /// Appends the shift to the given `Data`.
+    pub fn apply(&self, data: Data) -> Data {
+        data.line_to(self.0)
+            .cubic_curve_to((self.1, self.2, self.3))
     }
 }

@@ -1,11 +1,15 @@
 use std::cmp::Ordering;
 use std::collections::{hash_map::Entry, BTreeSet, HashMap, HashSet};
-use std::io::{Result as IoResult, Write};
 use std::ops::{Index, IndexMut};
 
 use itertools::Itertools;
+use svg::node::{
+    element::{path::Data, Path, Use},
+    Node,
+};
 
 use crate::corner::{Corner, ParallelShift};
+use crate::document::Document;
 use crate::error::{EvaluatorError, MathError};
 use crate::expressions::Variable;
 use crate::statement;
@@ -281,14 +285,13 @@ impl PointCollection {
         Ok(())
     }
 
-    pub fn draw_stops(&self, default_width: f64, f: &mut impl Write) -> IoResult<()> {
+    pub fn draw_stops(&self, default_width: f64, document: &mut Document) {
         for stop in &self.stops {
-            self.draw_stop(stop, default_width, f)?;
+            self.draw_stop(stop, default_width, document);
         }
-        Ok(())
     }
 
-    fn draw_stop(&self, stop: &Stop, default_width: f64, f: &mut impl Write) -> IoResult<()> {
+    fn draw_stop(&self, stop: &Stop, default_width: f64, document: &mut Document) {
         // just put a circle at the stop for now
         // TODO: More complicated stop icons
         // TODO: Stop labels
@@ -320,108 +323,86 @@ impl PointCollection {
         // step 2: draw the stop icons
         for (point, route) in points_and_routes {
             let route = &self[route];
-            write!(
-                f,
-                "<circle cx=\"{}\" cy=\"{}\" r=\"{}\"",
-                point.0,
-                point.1,
-                route.width / 2.0
-            )?;
-            write!(f, " class=\"stop")?;
-            if let Some(style) = &route.style {
-                write!(f, " stop-{}", style)?;
-            }
-            writeln!(f, "\" />")?;
+            let marker = Use::new()
+                .set("href", "#stop")
+                .set("x", point.0)
+                .set("y", point.1)
+                .set(
+                    "class",
+                    if let Some(style) = &stop.style {
+                        format!("stop {} {}", route.name, style)
+                    } else {
+                        format!("stop {}", route.name)
+                    },
+                );
+            document.add_stop(marker);
         }
-        Ok(())
     }
 
-    pub fn draw_routes(
-        &self,
-        default_width: f64,
-        inner_radius: f64,
-        f: &mut impl Write,
-    ) -> IoResult<()> {
+    pub fn draw_routes(&self, default_width: f64, inner_radius: f64, document: &mut Document) {
         for route in &self.routes {
-            self.draw_route(route, default_width, inner_radius, f)?;
+            let path = self.route_to_path(route, default_width, inner_radius);
+            document.add_route(&route.name, route.style.as_ref().map(|s| &**s), path);
         }
-        Ok(())
     }
 
-    fn draw_route(
-        &self,
-        route: &Route,
-        default_width: f64,
-        inner_radius: f64,
-        f: &mut impl Write,
-    ) -> IoResult<()> {
-        write!(f, "<path")?;
-        write!(f, " id=\"route-{}\"", route.name)?;
-        write!(f, " class=\"route")?;
-        if let Some(style) = &route.style {
-            write!(f, " route-{}", style)?;
-        }
-        write!(f, "\"")?;
-        if route.segments.is_empty() {
-            write!(f, " />")?;
-            return Ok(());
-        }
-        // now on to drawing the route
-        write!(f, " d=\"")?;
-        write!(
-            f,
-            "M {}",
-            self.segment_start(route.segments.first().unwrap(), default_width)
-        )?;
-        for (current, next) in route.segments.iter().tuple_windows() {
-            // process `current` in the loop; `next` will be handled on the next iteration, or
-            // after the loop, for the last segment.
-            for shift in self.parallel_shifts(current, default_width) {
-                write!(f, " {}", shift)?;
-            }
-            if current.end == next.start {
-                match self.are_collinear(current.start, current.end, next.end) {
-                    Collinearity::Sequential => {
-                        // parallel shift
-                        if let Some(shift) = self.parallel_shift(current, next, default_width) {
-                            write!(f, " {}", shift)?;
-                        }
-                    }
-                    Collinearity::NotSequential => {
-                        if current.offset == -next.offset {
-                            // no turn, just a straight line ending.
-                            write!(f, " L {}", self.segment_end(current, default_width))?;
-                        } else {
-                            // u-turn
-                            write!(f, " {}", self.u_turn(current, next, default_width))?;
-                        }
-                    }
-                    Collinearity::NotCollinear => {
-                        // corner
-                        write!(
-                            f,
-                            " {}",
-                            self.corner(current, next, default_width, inner_radius)
-                        )?;
-                    }
-                }
+    fn route_to_path(&self, route: &Route, default_width: f64, inner_radius: f64) -> Path {
+        let mut path = Path::new().set("id", format!("route-{}", route.name)).set(
+            "class",
+            if let Some(style) = &route.style {
+                format!("route {}", style)
             } else {
-                // end this line, and move to the start of the next.
-                write!(
-                    f,
-                    " L {} M {}",
-                    self.segment_end(current, default_width),
-                    self.segment_start(next, default_width)
-                )?;
+                "route".into()
+            },
+        );
+        if let Some(segment) = route.segments.first() {
+            // the start of the route
+            let mut data = Data::new().move_to(self.segment_start(segment, default_width));
+            for (current, next) in route.segments.iter().tuple_windows() {
+                // process `current` in the loop; `next` will be handled on the next iteration, or
+                // after the loop, for the last segment.
+                for shift in self.parallel_shifts(current, default_width) {
+                    data = shift.apply(data);
+                }
+                if current.end == next.start {
+                    match self.are_collinear(current.start, current.end, next.end) {
+                        Collinearity::Sequential => {
+                            // parallel shift
+                            if let Some(shift) = self.parallel_shift(current, next, default_width) {
+                                data = shift.apply(data);
+                            }
+                        }
+                        Collinearity::NotSequential => {
+                            if current.offset == -next.offset {
+                                // no turn, just a straight line ending.
+                                data = data.line_to(self.segment_end(current, default_width));
+                            } else {
+                                // u-turn
+                                data = self.u_turn(current, next, default_width).apply(data);
+                            }
+                        }
+                        Collinearity::NotCollinear => {
+                            // corner
+                            data = self
+                                .corner(current, next, default_width, inner_radius)
+                                .apply(data);
+                        }
+                    }
+                } else {
+                    // end this line, and move to the start of the next.
+                    data = data
+                        .line_to(self.segment_end(current, default_width))
+                        .move_to(self.segment_start(next, default_width));
+                }
             }
+            let current = route.segments.last().unwrap();
+            for shift in self.parallel_shifts(current, default_width) {
+                data = shift.apply(data);
+            }
+            data = data.line_to(self.segment_end(current, default_width));
+            path.assign("d", data);
         }
-        let current = route.segments.last().unwrap();
-        for shift in self.parallel_shifts(current, default_width) {
-            write!(f, " {}", shift)?;
-        }
-        write!(f, " L {}", self.segment_end(current, default_width))?;
-        writeln!(f, "\" />")?;
-        Ok(())
+        path
     }
 
     pub fn parallel_shifts(
