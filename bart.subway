@@ -75,7 +75,7 @@ route orange:                       rich --( 0) c0 --( 0) wye --( 0) warm;
 stop.terminus antc (all) "Antioch" end;
 stop          pctr (all) "Pittsburg Center" above;
 stop          pitt (all) "Pittsburg/\nBay Point" above;
-stop          conc (all) "North Concord/\nMartinez" above;
+stop          ncon (all) "North Concord/\nMartinez" above;
 stop          conc (all) "Concord" below;
 stop          phil (all) "Pleasant Hill/\nContra Costa Centre" below;
 stop          wcrk (all) "Walnut Creek" below;
