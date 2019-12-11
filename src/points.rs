@@ -278,7 +278,7 @@ impl PointCollection {
             .transpose()?;
         self.stops.push(Stop {
             point,
-            style,
+            style: style.unwrap_or_default(),
             routes,
             label,
         });
@@ -327,14 +327,7 @@ impl PointCollection {
                 .set("href", "#stop")
                 .set("x", point.0)
                 .set("y", point.1)
-                .set(
-                    "class",
-                    if let Some(style) = &stop.style {
-                        format!("stop {} {}", route.name, style)
-                    } else {
-                        format!("stop {}", route.name)
-                    },
-                );
+                .set("class", format!("stop {} {}", route.name, stop.style));
             document.add_stop(marker);
         }
     }
@@ -342,19 +335,14 @@ impl PointCollection {
     pub fn draw_routes(&self, default_width: f64, inner_radius: f64, document: &mut Document) {
         for route in &self.routes {
             let path = self.route_to_path(route, default_width, inner_radius);
-            document.add_route(&route.name, route.style.as_ref().map(|s| &**s), path);
+            document.add_route(&route.name, &route.style, path);
         }
     }
 
     fn route_to_path(&self, route: &Route, default_width: f64, inner_radius: f64) -> Path {
-        let mut path = Path::new().set("id", format!("route-{}", route.name)).set(
-            "class",
-            if let Some(style) = &route.style {
-                format!("route {}", style)
-            } else {
-                "route".into()
-            },
-        );
+        let mut path = Path::new()
+            .set("id", format!("route-{}", route.name))
+            .set("class", format!("route {}", route.style));
         if let Some(segment) = route.segments.first() {
             // the start of the route
             let mut data = Data::new().move_to(self.segment_start(segment, default_width));
@@ -1112,7 +1100,7 @@ pub struct Route {
     /// The width of the route line.
     width: f64,
     /// The style (if any) for the route.
-    style: Option<Variable>,
+    style: String,
     /// The segments making up the route.
     segments: Vec<RouteSegment>,
     /// The number of the line where the route is defined.
@@ -1124,7 +1112,7 @@ impl Route {
         Route {
             name,
             width,
-            style,
+            style: style.unwrap_or_default(),
             segments: Vec::new(),
             line_number,
         }
@@ -1152,7 +1140,7 @@ pub struct Stop {
     /// The location of the stop.
     pub point: PointId,
     /// The style of the stop.
-    pub style: Option<Variable>,
+    pub style: String,
     /// The set of routes which stop at the stop, or `None` if all lines stop.
     pub routes: Option<Vec<RouteId>>,
     /// The label.

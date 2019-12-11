@@ -18,23 +18,23 @@ impl Document {
         Document::default()
     }
 
-    pub fn add_route(&mut self, id: &str, style: Option<&str>, path: Path) {
+    pub fn add_route(&mut self, id: &str, style: &str, path: Path) {
         self.routes_def.append(path);
-        self.routes_use
-            .append(Use::new().set("href", format!("#route-{}", id)).set(
-                "class",
-                format!("route bg {} {}", id, style.unwrap_or_default()),
-            ));
-        self.routes_use
-            .append(Use::new().set("href", format!("#route-{}", id)).set(
-                "class",
-                format!("route mg {} {}", id, style.unwrap_or_default()),
-            ));
-        self.routes_use
-            .append(Use::new().set("href", format!("#route-{}", id)).set(
-                "class",
-                format!("route fg {} {}", id, style.unwrap_or_default()),
-            ));
+        self.routes_use.append(
+            Use::new()
+                .set("href", format!("#route-{}", id))
+                .set("class", format!("route bg {} {}", id, style)),
+        );
+        self.routes_use.append(
+            Use::new()
+                .set("href", format!("#route-{}", id))
+                .set("class", format!("route mg {} {}", id, style)),
+        );
+        self.routes_use.append(
+            Use::new()
+                .set("href", format!("#route-{}", id))
+                .set("class", format!("route fg {} {}", id, style)),
+        );
     }
 
     pub fn add_stop(&mut self, stop: Use) {
