@@ -45,6 +45,8 @@ pub enum StatementKind {
     },
     /// A declaration of a stop.
     Stop(Stop),
+    /// A stylesheet declaration.
+    Style(String),
 }
 
 /// A segment in a route.

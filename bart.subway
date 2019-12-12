@@ -11,6 +11,9 @@ line_sep = 10;
 # inner_radius determines the radius of the innermost curve in a rounded corner
 inner_radius = 20;
 
+# stylesheet
+style "bart.css";
+
 ss = line_sep * 5;
 
 m = 1/2;

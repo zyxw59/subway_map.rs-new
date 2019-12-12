@@ -310,6 +310,12 @@ where
                     }
                     // stop
                     "stop" => self.parse_stop_statement(),
+                    // stylesheet
+                    "style" => {
+                        expect! { self,
+                            Token::String(style) => Ok(Some(StatementKind::Style(style)))
+                        }
+                    }
                     // other (variable assignment)
                     _ => {
                         let tag = self.parse_dotted_ident(tag)?;

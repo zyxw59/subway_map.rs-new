@@ -19,6 +19,7 @@ pub struct Evaluator {
     variables: HashMap<Variable, Value>,
     functions: HashMap<Variable, Function>,
     points: PointCollection,
+    stylesheets: Vec<String>,
 }
 
 impl Evaluator {
@@ -151,8 +152,22 @@ impl Evaluator {
             StatementKind::Stop(stop) => {
                 self.points.add_stop(stop, line)?;
             }
+            StatementKind::Style(style) => self.stylesheets.push(style),
         }
         Ok(())
+    }
+
+    pub fn create_document(&self) -> Document {
+        let mut document = Document::new();
+        self.set_stylesheets(&mut document);
+        self.set_view_box(&mut document);
+        self.draw_routes(&mut document);
+        self.draw_stops(&mut document);
+        document
+    }
+
+    pub fn set_stylesheets(&self, document: &mut Document) {
+        document.add_stylesheets(&self.stylesheets);
     }
 
     pub fn set_view_box(&self, document: &mut Document) {
