@@ -331,11 +331,23 @@ impl Value {
     }
 
     pub fn max(self, other: Value) -> Result {
-        numeric_fn!((self, other) as (x, y) => Ok(Value::Number(x.max(y))))
+        use self::Value::*;
+        match (self, other) {
+            (Number(x), Number(y)) => Ok(Number(x.max(y))),
+            (Point(x1, y1), Point(x2, y2)) => Ok(Point(x1.max(x2), y1.max(y2))),
+            (Line(..), _) => Err(MathError::Type(Type::Number, Type::Line)),
+            (_, _) => Err(MathError::Type(self.into(), other.into())),
+        }
     }
 
     pub fn min(self, other: Value) -> Result {
-        numeric_fn!((self, other) as (x, y) => Ok(Value::Number(x.min(y))))
+        use self::Value::*;
+        match (self, other) {
+            (Number(x), Number(y)) => Ok(Number(x.min(y))),
+            (Point(x1, y1), Point(x2, y2)) => Ok(Point(x1.min(x2), y1.min(y2))),
+            (Line(..), _) => Err(MathError::Type(Type::Number, Type::Line)),
+            (_, _) => Err(MathError::Type(self.into(), other.into())),
+        }
     }
 }
 
