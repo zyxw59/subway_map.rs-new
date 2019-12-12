@@ -103,6 +103,7 @@ impl From<Value> for Type {
         match expr {
             Value::Number(_) => Type::Number,
             Value::Point(..) => Type::Point,
+            Value::Line(..) => Type::Line,
         }
     }
 }

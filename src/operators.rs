@@ -50,6 +50,9 @@ mod builtins {
     bin_op! {MUL(Multiplicative, ops::Mul::mul, "*")}
     bin_op! {DIV(Multiplicative, ops::Div::div, "/")}
     bin_op! {POW(Exponential, Value::pow, "^")}
+    bin_op! {LINE_BETWEEN(Exponential, Value::line_between, "<>")}
+    bin_op! {LINE_VECTOR(Exponential, Value::line_vector, ">>")}
+    bin_op! {INTERSECT(Multiplicative, Value::intersect, "&")}
 
     macro_rules! unary_op {
         ($name:ident ( $prec:ident, $fun:path, $debug:literal )) => {
@@ -90,6 +93,9 @@ impl BinaryBuiltins {
             "^" => Some(&builtins::POW),
             "max" => Some(&builtins::MAX),
             "min" => Some(&builtins::MIN),
+            "<>" => Some(&builtins::LINE_BETWEEN),
+            ">>" => Some(&builtins::LINE_VECTOR),
+            "&" => Some(&builtins::INTERSECT),
             _ => None,
         }
     }

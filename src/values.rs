@@ -170,6 +170,7 @@ impl From<Point> for Parameters {
 pub enum Value {
     Number(f64),
     Point(f64, f64),
+    Line(Point, Point),
 }
 
 impl Value {
@@ -244,6 +245,36 @@ impl Value {
         match self {
             Point(_, y) => Ok(Number(y)),
             x => Err(MathError::Type(Type::Point, x.into())),
+        }
+    }
+
+    /// Line between two points
+    pub fn line_between(self, rhs: Value) -> Result {
+        match (self, rhs) {
+            (Value::Point(x1, y1), Value::Point(x2, y2)) => {
+                Ok(Value::Line(Point(x1, y1), Point(x2 - x1, y2 - y1)))
+            }
+            _ => Err(MathError::Type(Type::Point, self.into())),
+        }
+    }
+
+    /// Line from point and vector
+    pub fn line_vector(self, rhs: Value) -> Result {
+        match (self, rhs) {
+            (Value::Point(x1, y1), Value::Point(x2, y2)) => {
+                Ok(Value::Line(Point(x1, y1), Point(x2, y2)))
+            }
+            _ => Err(MathError::Type(Type::Point, self.into())),
+        }
+    }
+
+    pub fn intersect(self, rhs: Value) -> Result {
+        use self::Value::*;
+        match (self, rhs) {
+            (Line(p1, d1), Line(p2, d2)) => {
+                Ok((d1.mul_add((p2 - p1).cross(d2) / d1.cross(d2), p1)).into())
+            }
+            _ => Err(MathError::Type(Type::Line, self.into())),
         }
     }
 
@@ -344,6 +375,7 @@ impl ops::Mul for Value {
             (Number(a), Point(x, y)) => Point(a * x, a * y),
             (Point(x, y), Number(a)) => Point(a * x, a * y),
             (Point(x1, y1), Point(x2, y2)) => Number(x1 * x2 + y1 * y2),
+            _ => return Err(MathError::Type(self.into(), rhs.into())),
         })
     }
 }
@@ -370,6 +402,7 @@ impl ops::Neg for Value {
         Ok(match self {
             Number(x) => Number(-x),
             Point(x, y) => Point(-x, -y),
+            _ => return Err(MathError::Type(Type::Number, self.into())),
         })
     }
 }
@@ -512,5 +545,10 @@ mod tests {
     fn unary_sin() {
         // sin 90 == 1
         assert_eval!(("sin", 90), 1);
+    }
+
+    #[test]
+    fn intersect() {
+        assert_eval!(("&", ("<>", (@1, 2), (@3, 4)), ("<>", (@1, 4), (@3, 2))), (2, 3))
     }
 }
