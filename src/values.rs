@@ -229,6 +229,24 @@ impl Value {
         }
     }
 
+    /// x value of the given point
+    pub fn xpart(self) -> Result {
+        use self::Value::*;
+        match self {
+            Point(x, _) => Ok(Number(x)),
+            x => Err(MathError::Type(Type::Point, x.into())),
+        }
+    }
+
+    /// y value of the given point
+    pub fn ypart(self) -> Result {
+        use self::Value::*;
+        match self {
+            Point(_, y) => Ok(Number(y)),
+            x => Err(MathError::Type(Type::Point, x.into())),
+        }
+    }
+
     pub fn eq(self, other: Value) -> Result {
         use self::Value::*;
         match (self, other) {
@@ -279,6 +297,14 @@ impl Value {
             (Number(x), Number(y)) => Ok(Value::from(x >= y)),
             _ => Err(MathError::Type(Type::Number, self.into())),
         }
+    }
+
+    pub fn max(self, other: Value) -> Result {
+        numeric_fn!((self, other) as (x, y) => Ok(Value::Number(x.max(y))))
+    }
+
+    pub fn min(self, other: Value) -> Result {
+        numeric_fn!((self, other) as (x, y) => Ok(Value::Number(x.min(y))))
     }
 }
 

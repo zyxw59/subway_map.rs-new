@@ -12,10 +12,8 @@ line_sep = 10;
 inner_radius = 20;
 
 ss = line_sep * 5;
-margin = (ss, ss);
 
 m = 1/2;
-
 
 # 60-degree grid
 NE = ss * dir 30;
@@ -26,7 +24,7 @@ W  = ss * dir 270;
 NW = ss * dir 330;
 
 # oakland wye
-point wye = margin + (10 + 3 * m) * SE;
+point wye = (0, 0);
 
 # antioch line
 points from wye spaced NE:  st12, st19, mcar, (m) c0;
@@ -58,6 +56,12 @@ points from w0  spaced SE: (m) colm, ssan, sbrn, y0, mlbr;
 
 # sfo line
 point sfia = y0 + ss * dir 60;
+
+# viewbox
+top = (ypart rich min ypart antc) - ss;
+bottom = (ypart mlbr max ypart warm) + ss;
+left = xpart w0 - ss;
+right = (xpart antc max xpart dubl max xpart warm) + ss;
 
 # segment offsets are positive to the right, travelling in the direction of the
 # segment as written, so `a --(1) b` is the same as `b --(-1) a`

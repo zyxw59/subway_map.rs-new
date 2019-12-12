@@ -41,6 +41,8 @@ mod builtins {
     bin_op! {LE(Comparison, Value::le, ">=")}
     bin_op! {GT(Comparison, Value::gt, "<")}
     bin_op! {GE(Comparison, Value::ge, "<=")}
+    bin_op! {MAX(Comparison, Value::max, "max")}
+    bin_op! {MIN(Comparison, Value::min, "min")}
     bin_op! {ADD(Additive, ops::Add::add, "+")}
     bin_op! {SUB(Additive, ops::Sub::sub, "-")}
     bin_op! {HYPOT(Additive, Value::hypot, "++")}
@@ -64,6 +66,8 @@ mod builtins {
     unary_op! {SIN(Exponential, Value::sin, "sin")}
     unary_op! {DIR(Exponential, Value::dir, "dir")}
     unary_op! {ANGLE(Exponential, Value::angle, "angle")}
+    unary_op! {XPART(Multiplicative, Value::xpart, "xpart")}
+    unary_op! {YPART(Multiplicative, Value::ypart, "ypart")}
 }
 
 pub struct BinaryBuiltins;
@@ -84,6 +88,8 @@ impl BinaryBuiltins {
             "*" => Some(&builtins::MUL),
             "/" => Some(&builtins::DIV),
             "^" => Some(&builtins::POW),
+            "max" => Some(&builtins::MAX),
+            "min" => Some(&builtins::MIN),
             _ => None,
         }
     }
@@ -99,6 +105,8 @@ impl UnaryBuiltins {
             "sin" => Some(&builtins::SIN),
             "dir" => Some(&builtins::DIR),
             "angle" => Some(&builtins::ANGLE),
+            "xpart" => Some(&builtins::XPART),
+            "ypart" => Some(&builtins::YPART),
             _ => None,
         }
     }

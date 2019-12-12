@@ -155,6 +155,26 @@ impl Evaluator {
         Ok(())
     }
 
+    pub fn set_view_box(&self, document: &mut Document) {
+        let top = self
+            .get_variable("top")
+            .and_then(Value::as_number)
+            .unwrap_or(0.0);
+        let left = self
+            .get_variable("left")
+            .and_then(Value::as_number)
+            .unwrap_or(0.0);
+        let bottom = self
+            .get_variable("bottom")
+            .and_then(Value::as_number)
+            .unwrap_or(0.0);
+        let right = self
+            .get_variable("right")
+            .and_then(Value::as_number)
+            .unwrap_or(0.0);
+        document.set_view_box(top, left, bottom, right);
+    }
+
     pub fn draw_routes(&self, document: &mut Document) {
         let line_sep = self
             .variables

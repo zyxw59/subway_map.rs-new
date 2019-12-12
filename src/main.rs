@@ -24,11 +24,8 @@ fn main() -> Result<(), error::Error> {
     let mut document = document::Document::new();
     evaluator.draw_routes(&mut document);
     evaluator.draw_stops(&mut document);
-    let document = document
-        .compile()
-        .set("width", 1200)
-        .set("height", 1200)
-        .set("viewBox", (-200, 0, 1000, 1200));
+    evaluator.set_view_box(&mut document);
+    let document = document.compile();
     let stdout = io::stdout();
     println!(r#"<?xml version="1.0" encoding="utf-8" ?>"#);
     println!(r#"<?xml-stylesheet type="text/css" href="test.css"?>"#);
