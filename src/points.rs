@@ -734,12 +734,19 @@ impl Line {
         // make immutable again
         let (p1, p2, offset) = (p1, p2, offset);
 
-        let start_seg = self.segments.binary_search_by(|seg| seg.cmp(&p1));
-        let end_seg = self.segments.binary_search_by(|seg| seg.cmp(&p2));
-        let pre_split = match start_seg {
+        // start_idx points to the segment which contains the start of the new segment, or the
+        // segment after the start of the new segment
+        let start_idx = self.segments.binary_search_by(|seg| seg.cmp(&p1));
+        // end_idx points to the segment which contains the end of the new segment, or the segment
+        // after the end of the new segment
+        let end_idx = self.segments.binary_search_by(|seg| seg.cmp(&p2));
+        let pre_split = match start_idx {
+            // split the segment containing p1
             Ok(start) => self.segments[start].split(p1),
+            // create a new segment
             Err(start) => {
-                let end_point = if let Some(next_seg) = self.segments.get(start + 1) {
+                // get the start point of the next segment
+                let end_point = if let Some(next_seg) = self.segments.get(start) {
                     next_seg.start.min(p2)
                 } else {
                     p2
@@ -747,16 +754,21 @@ impl Line {
                 Some(Segment::new(p1, end_point, offset, width, route_id))
             }
         };
-        let post_split = match end_seg {
+        let post_split = match end_idx {
+            // split the segment containing p2
             Ok(end) => self.segments[end]
                 .split(p2)
                 .map(|seg| seg.update_new(offset, width, route_id)),
+            // create a new segment
             Err(end) => {
+                // get the end point of the previous segment
                 let start_point = if end > 0 {
                     self.segments[end - 1].end.max(p1)
                 } else {
                     p1
                 };
+                // if the start point is equal to p2, we're be creating an empty segment, so return
+                // None instead
                 if start_point == p2 {
                     None
                 } else {
@@ -764,9 +776,30 @@ impl Line {
                 }
             }
         };
-        let start = start_seg.unwrap_or_else(|err| err);
-        let end = end_seg.unwrap_or_else(|err| err);
+        let start = start_idx.unwrap_or_else(|err| err);
+        let mut end = end_idx.unwrap_or_else(|err| err);
         // update the intermediate segments
+        let mut idx = start;
+        while idx < end {
+            // update this segment
+            self.segments[idx].update(offset, width, route_id);
+            // add an intermediate segment if necessary
+            if idx + 1 < self.segments.len() {
+                let curr_end = self.segments[idx].end;
+                let next_start = self.segments[idx + 1].start;
+                if curr_end < next_start {
+                    // there's a gap
+                    // if end_idx points to a gap, we need to check we're not in that gap
+                    if idx + 1 != end || end_idx.is_ok() {
+                        let new_seg = Segment::new(curr_end, next_start, offset, width, route_id);
+                        self.segments.insert(idx + 1, new_seg);
+                        idx += 1;
+                        end += 1;
+                    }
+                }
+            }
+            idx += 1;
+        }
         for seg in &mut self.segments[start..end] {
             seg.update(offset, width, route_id);
         }
