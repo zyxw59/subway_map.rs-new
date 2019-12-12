@@ -327,7 +327,10 @@ impl PointCollection {
                 .set("href", "#stop")
                 .set("x", point.0)
                 .set("y", point.1)
-                .set("class", format!("stop {} {}", route.name, stop.style));
+                .set(
+                    "class",
+                    format!("stop {} {} {}", route.name, stop.style, route.style),
+                );
             document.add_stop(marker);
         }
     }
