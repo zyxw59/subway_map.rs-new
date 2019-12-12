@@ -59,7 +59,7 @@ impl PointCollection {
         &mut self,
         name: Variable,
         width: f64,
-        style: Option<Variable>,
+        styles: Vec<Variable>,
         line_number: usize,
     ) -> Result<RouteId, EvaluatorError> {
         match self.route_ids.entry(name) {
@@ -74,7 +74,7 @@ impl PointCollection {
             Entry::Vacant(e) => {
                 let id = RouteId(self.routes.len());
                 self.routes
-                    .push(Route::new(e.key().clone(), width, style, line_number));
+                    .push(Route::new(e.key().clone(), width, styles, line_number));
                 e.insert(id);
                 Ok(id)
             }
@@ -254,7 +254,7 @@ impl PointCollection {
         &mut self,
         statement::Stop {
             point,
-            style,
+            styles,
             routes,
             label,
         }: statement::Stop,
@@ -278,7 +278,7 @@ impl PointCollection {
             .transpose()?;
         self.stops.push(Stop {
             point,
-            style: style.unwrap_or_default(),
+            style: styles.join(" "),
             routes,
             label,
         });
@@ -1111,11 +1111,11 @@ pub struct Route {
 }
 
 impl Route {
-    fn new(name: Variable, width: f64, style: Option<Variable>, line_number: usize) -> Route {
+    fn new(name: Variable, width: f64, style: Vec<Variable>, line_number: usize) -> Route {
         Route {
             name,
             width,
-            style: style.unwrap_or_default(),
+            style: style.join(" "),
             segments: Vec::new(),
             line_number,
         }
@@ -1235,7 +1235,7 @@ mod tests {
             )
             .unwrap();
         let route = points
-            .insert_route_get_id("red".into(), 1.0, None, 3)
+            .insert_route_get_id("red".into(), 1.0, Vec::new(), 3)
             .unwrap();
         points.add_segment(route, "A", "B", 0).unwrap();
         points.add_segment(route, "B", "D", 0).unwrap();

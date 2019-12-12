@@ -292,19 +292,13 @@ where
                     "points" => self.parse_points_statement(),
                     // route
                     "route" => {
-                        let (name, style) = expect! { self,
-                            Token::Tag(name) => (name, None),
-                            Token::Dot => {
-                                let style = expect!(self, Token::Tag(style) => Some(style));
-                                let name = expect!(self, Token::Tag(name) => name);
-                                (name, style)
-                            },
-                        };
+                        let styles = self.parse_dot_list()?;
+                        let name = expect!(self, Token::Tag(name) => name);
                         expect!(self, Token::Tag(ref tag) if tag == ":");
                         let segments = self.parse_route()?;
                         Ok(Some(StatementKind::Route {
                             name,
-                            style,
+                            styles,
                             segments,
                         }))
                     }
@@ -335,6 +329,21 @@ where
             // empty statement, end of input
             None => Ok(None),
         }
+    }
+
+    fn parse_dot_list(&mut self) -> EResult<Vec<Variable>> {
+        let mut list = Vec::new();
+        loop {
+            match try_opt!(self.next()) {
+                Some(Token::Dot) => expect!(self, Token::Tag(tag) => list.push(tag)),
+                Some(tok) => {
+                    self.put_back(tok);
+                    break;
+                }
+                _ => break,
+            }
+        }
+        Ok(list)
     }
 
     fn parse_points_statement(&mut self) -> EResult<Option<StatementKind>> {
@@ -373,14 +382,8 @@ where
     }
 
     fn parse_stop_statement(&mut self) -> EResult<Option<StatementKind>> {
-        let (point, style) = expect! { self,
-            Token::Tag(point) => (point, None),
-            Token::Dot => {
-                let style = expect!(self, Token::Tag(style) => Some(style));
-                let point = expect!(self, Token::Tag(point) => point);
-                (point, style)
-            },
-        };
+        let styles = self.parse_dot_list()?;
+        let point = expect!(self, Token::Tag(point) => point);
         expect!(self, Token::LeftParen);
         let tag = expect!(self, Token::Tag(tag) => tag);
         let routes = if tag == "all" {
@@ -410,7 +413,7 @@ where
         };
         Ok(Some(StatementKind::Stop(Stop {
             point,
-            style,
+            styles,
             routes,
             label,
         })))
@@ -599,7 +602,7 @@ mod tests {
         assert_statement!(
             "route red: a --(1) b --(1) c",
             StatementKind::Route {
-                style: None,
+                styles: vec![],
                 name: "red".to_string(),
                 segments: vec![segment!("a", "b", 1), segment!("b", "c", 1),],
             }
@@ -611,7 +614,7 @@ mod tests {
         assert_statement!(
             "route.narrow red: a --(1) b --(1) c",
             StatementKind::Route {
-                style: Some("narrow".to_string()),
+                styles: vec!["narrow".to_string()],
                 name: "red".to_string(),
                 segments: vec![segment!("a", "b", 1), segment!("b", "c", 1),],
             }
@@ -623,7 +626,7 @@ mod tests {
         assert_statement!(
             r#"stop a (all) "A" above"#,
             StatementKind::Stop(Stop {
-                style: None,
+                styles: vec![],
                 point: "a".to_string(),
                 routes: None,
                 label: Some(Label {
@@ -639,7 +642,7 @@ mod tests {
         assert_statement!(
             r#"stop.terminus a (all) "A" end"#,
             StatementKind::Stop(Stop {
-                style: Some("terminus".to_string()),
+                styles: vec!["terminus".to_string()],
                 point: "a".to_string(),
                 routes: None,
                 label: Some(Label {
@@ -655,7 +658,7 @@ mod tests {
         assert_statement!(
             r#"stop a (red, blue) "A" above"#,
             StatementKind::Stop(Stop {
-                style: None,
+                styles: vec![],
                 point: "a".to_string(),
                 routes: Some(vec!["red".to_string(), "blue".to_string()]),
                 label: Some(Label {
@@ -671,7 +674,7 @@ mod tests {
         assert_statement!(
             "stop a (all);",
             StatementKind::Stop(Stop {
-                style: None,
+                styles: vec![],
                 point: "a".to_string(),
                 routes: None,
                 label: None,

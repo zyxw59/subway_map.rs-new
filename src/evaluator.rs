@@ -119,20 +119,22 @@ impl Evaluator {
             }
             StatementKind::Route {
                 name,
-                style,
+                styles,
                 segments,
             } => {
-                let width = style
-                    .as_ref()
-                    // if style is present, get the appropriate line_sep
-                    .and_then(|style| self.get_variable(&format!("line_sep.{}", style)))
-                    // if line_sep.style isn't set, or if style isn't set, get the default line_sep
+                let width = styles
+                    .iter()
+                    // if a style has a distinct line_sep, get the appropriate line_sep
+                    .filter_map(|style| self.get_variable(&format!("line_sep.{}", style)))
+                    // take the line_sep of the first listed style with a defined line_sep
+                    .next()
+                    // otherwise, get the default line_sep
                     .or_else(|| self.get_variable("line_sep"))
                     // convert value to number
                     .and_then(Value::as_number)
                     // if it wasn't found, or wasn't a number, default to 1
                     .unwrap_or(1.0);
-                let route = self.points.insert_route_get_id(name, width, style, line)?;
+                let route = self.points.insert_route_get_id(name, width, styles, line)?;
                 for segment in segments {
                     // if offset evaluates to a number, coerce it to an integer
                     // TODO: add warning if it's not an integer

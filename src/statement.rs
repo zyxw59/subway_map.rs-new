@@ -39,7 +39,7 @@ pub enum StatementKind {
         /// The name of the route.
         name: Variable,
         /// The style of the route.
-        style: Option<Variable>,
+        styles: Vec<Variable>,
         /// The sequence of segments the route follows.
         segments: Vec<Segment>,
     },
@@ -66,7 +66,7 @@ pub struct Stop {
     /// The location of the stop.
     pub point: Variable,
     /// The style of the stop.
-    pub style: Option<Variable>,
+    pub styles: Vec<Variable>,
     /// The set of routes which stop at the stop, or `None` if all lines stop.
     pub routes: Option<Vec<Variable>>,
     /// The label.
