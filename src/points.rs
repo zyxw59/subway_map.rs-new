@@ -207,8 +207,17 @@ impl PointCollection {
         points: impl IntoIterator<Item = (Variable, f64)>,
         line_number: usize,
     ) -> Result<(), EvaluatorError> {
-        let start_id = self.point_ids[&start_point];
-        let end_id = self.point_ids[&end_point];
+        let start_id = *self
+            .point_ids
+            .get(&start_point)
+            .ok_or(EvaluatorError::Math(
+                MathError::Variable(start_point),
+                line_number,
+            ))?;
+        let end_id = *self.point_ids.get(&end_point).ok_or(EvaluatorError::Math(
+            MathError::Variable(end_point),
+            line_number,
+        ))?;
         let line_id = self.get_or_insert_line(start_id, end_id);
         let start = self[start_id].info.value;
         let end = self[end_id].info.value;
@@ -726,6 +735,10 @@ impl Line {
     ) {
         let mut p1 = self.line_point(p1);
         let mut p2 = self.line_point(p2);
+        // if the two points are the same, we have nothing to update
+        if p1 == p2 {
+            return;
+        }
         if p1 > p2 {
             // switch the order
             std::mem::swap(&mut p1, &mut p2);
@@ -740,6 +753,7 @@ impl Line {
         // end_idx points to the segment which contains the end of the new segment, or the segment
         // after the end of the new segment
         let end_idx = self.segments.binary_search_by(|seg| seg.cmp(&p2));
+
         let pre_split = match start_idx {
             // split the segment containing p1
             Ok(start) => self.segments[start].split(p1),
@@ -754,11 +768,10 @@ impl Line {
                 Some(Segment::new(p1, end_point, offset, width, route_id))
             }
         };
+
         let post_split = match end_idx {
             // split the segment containing p2
-            Ok(end) => self.segments[end]
-                .split(p2)
-                .map(|seg| seg.update_new(offset, width, route_id)),
+            Ok(end) => self.segments[end].split(p2),
             // create a new segment
             Err(end) => {
                 // get the end point of the previous segment
@@ -776,43 +789,113 @@ impl Line {
                 }
             }
         };
-        let start = start_idx.unwrap_or_else(|err| err);
+
+        let mut start = start_idx.unwrap_or_else(|err| err);
         let mut end = end_idx.unwrap_or_else(|err| err);
+
+        // insert the new segments if necessary
+        match (pre_split, post_split) {
+            (Some(pre_split), Some(mut post_split)) => {
+                // both endpoints of the new segment split an existing segment, or fell in a gap.
+
+                // the special cases to consider here are if both endpoints split the same segment
+                // or the same gap.
+                if pre_split.start == post_split.start && pre_split.end == post_split.end {
+                    // if they split the same gap, we will be left with two copies of the same
+                    // segment, and we should insert just one of them.
+                    assert_eq!(start, end);
+                    assert_eq!(pre_split, post_split);
+                    self.segments.insert(start, pre_split);
+                // `start` and `end` both point to this newly inserted segment.
+                } else if pre_split.start == post_split.start {
+                    // if they split the same segment, we will be left with two segments which
+                    // share a start point but not an end point.
+                    // `pre_split` does not include the current offset and route; `post_split`
+                    // does.
+                    // here we want to insert both of them, but first change the start point of
+                    // `post_split` to be `p1` (the end point of `pre_split`
+                    assert_eq!(start, end);
+                    assert_eq!(pre_split.end, p1);
+                    post_split.start = p1;
+                    self.segments.insert(end, post_split);
+                    self.segments.insert(start, pre_split);
+                    // increment `start` and `end` to point at the middle segment
+                    start += 1;
+                    end += 1;
+                } else {
+                    // otherwise, `p1` and `p2` split different segments or gaps.
+                    self.segments.insert(end, post_split);
+                    self.segments.insert(start, pre_split);
+
+                    // if `p1` split a segment, increment `start` to point at the new location of that
+                    // segment; otherwise, keep `start` as it is, to point at the newly inserted
+                    // segment.
+                    if start_idx.is_ok() {
+                        start += 1;
+                    }
+                    // increment `end` to point at the newly inserted segment (which moved by one after
+                    // the insertion of `pre_split`)
+                    end += 1;
+                }
+            }
+            (Some(pre_split), None) => {
+                // `p1` split a segment or fell in a gap; `p2` was at an expressions segment
+                // boundary.
+                self.segments.insert(start, pre_split);
+
+                // if `p1` split a segment, increment `start` to point at the new location of that
+                // segment; otherwise, keep `start` as it is, to point at the newly inserted
+                // segment.
+                if start_idx.is_ok() {
+                    start += 1;
+                }
+
+                // `end` pointed to the segment after the ending with `p2`; after the insertion of
+                // `pre_split`, it now points to the segment ending with `p2`.
+            }
+            (None, Some(post_split)) => {
+                // `p1` fell on an existing segment boundary; `p2` split a segment or fell in a
+                // gap.
+                self.segments.insert(end, post_split);
+                // `start` points to the segment starting with `p1`
+
+                // `end` points to the newly inserted segment (which ends with `p2`)
+            }
+            (None, None) => {
+                // both `p1` and `p2` fell on existing segment boundaries.
+                // `start` points to the segment starting with `p1`.
+                // `end` points to the segment after the one ending with `p2`; we know that
+                // `end > 0` because `end == 0` would imply that `p2` was at the start of the first
+                // segment, which would require either `p1 == p2` (which was checked for at the
+                // beginning of the function) or that `p1` fell in the gap before the first segment
+                // (which would mean `pre_split` is `Some`). Thus, decrement `end` by 1 to point at
+                // the segment ending at `p2`.
+                end -= 1;
+            }
+        }
+        // at this point, the new segments created from the start and end segments have been added.
+        // `start` points to the segment whose start point is `p1`
+        // `end` ponits to the segment whose end point is `p2`
+        // `start` and `end` are both in the range 0 <= x < segments.len()
+
         // update the intermediate segments
         let mut idx = start;
         while idx < end {
             // update this segment
             self.segments[idx].update(offset, width, route_id);
             // add an intermediate segment if necessary
-            if idx + 1 < self.segments.len() {
-                let curr_end = self.segments[idx].end;
-                let next_start = self.segments[idx + 1].start;
-                if curr_end < next_start {
-                    // there's a gap
-                    // if end_idx points to a gap, we need to check we're not in that gap
-                    if idx + 1 != end || end_idx.is_ok() {
-                        let new_seg = Segment::new(curr_end, next_start, offset, width, route_id);
-                        self.segments.insert(idx + 1, new_seg);
-                        idx += 1;
-                        end += 1;
-                    }
-                }
+            let curr_end = self.segments[idx].end;
+            let next_start = self.segments[idx + 1].start;
+            if curr_end < next_start {
+                let new_seg = Segment::new(curr_end, next_start, offset, width, route_id);
+                self.segments.insert(idx + 1, new_seg);
+                idx += 1;
+                end += 1;
             }
             idx += 1;
         }
-        for seg in &mut self.segments[start..end] {
-            seg.update(offset, width, route_id);
-        }
-        // insert the new segments if necessary
-        // NOTE: followup to check for bugs
-        if post_split != pre_split {
-            if let Some(post_split) = post_split {
-                self.segments.insert(end, post_split);
-            }
-        }
-        if let Some(pre_split) = pre_split {
-            self.segments.insert(start, pre_split);
-        }
+        // update the end segment
+        self.segments[end].update(offset, width, route_id);
     }
 
     fn segments_between(
@@ -911,11 +994,11 @@ impl Line {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct Segment {
     start: LinePoint,
     end: LinePoint,
-    routes: Vec<(RouteId, isize)>,
+    routes: HashSet<(RouteId, isize)>,
     pos_offsets: Vec<Option<f64>>,
     neg_offsets: Vec<Option<f64>>,
 }
@@ -931,7 +1014,7 @@ impl Segment {
         Segment {
             start,
             end,
-            routes: Vec::new(),
+            routes: HashSet::new(),
             pos_offsets: Vec::new(),
             neg_offsets: Vec::new(),
         }
@@ -1063,9 +1146,15 @@ impl Segment {
             self.neg_offsets[offset] =
                 Some(self.neg_offsets[offset].map_or(width, |old| old.max(width)));
         }
-        self.routes.push((route_id, offset));
+        self.routes.insert((route_id, offset));
     }
 
+    /// Compare the segment to a point.
+    ///
+    /// - `Ordering::Less`: The point is at or after the end of the segment.
+    /// - `Ordering::Equal`: The point is in the interior of the segment, or at the start of
+    ///   segment.
+    /// - `Ordering::Greater`: The point is before the start of the segment.
     fn cmp(&self, other: &LinePoint) -> Ordering {
         if self.end <= *other {
             Ordering::Less
@@ -1074,12 +1163,6 @@ impl Segment {
         } else {
             Ordering::Equal
         }
-    }
-}
-
-impl PartialEq for Segment {
-    fn eq(&self, other: &Self) -> bool {
-        self.start == other.start && self.end == other.end
     }
 }
 
