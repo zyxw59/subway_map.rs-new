@@ -6,7 +6,7 @@ use crate::error::{EvaluatorError, MathError, Result as EResult};
 use crate::expressions::{Function, Variable};
 use crate::points::PointCollection;
 use crate::statement::{Statement, StatementKind};
-use crate::values::{Point, Value};
+use crate::values::{Point, PointProvenance, Value};
 
 pub trait EvaluationContext {
     fn get_variable(&self, name: &str) -> Option<Value>;
@@ -58,11 +58,11 @@ impl Evaluator {
                 if let Some(original_line) = self.points.get_point_line_number(&name) {
                     return Err(EvaluatorError::PointRedefinition(name, line, original_line).into());
                 }
-                let value = expr
+                let (point, provenance) = expr
                     .evaluate(self)
-                    .and_then(Point::try_from)
+                    .and_then(<(Point, PointProvenance)>::try_from)
                     .map_err(|err| EvaluatorError::Math(err, line))?;
-                self.points.insert_point(name, value, line)?;
+                self.points.insert_point(name, point, provenance, line)?;
             }
             StatementKind::PointSpaced {
                 from,
@@ -221,10 +221,11 @@ impl Evaluator {
 
 impl EvaluationContext for Evaluator {
     fn get_variable(&self, name: &str) -> Option<Value> {
-        self.variables
-            .get(name)
-            .copied()
-            .or_else(|| self.points.get_point(name).map(Value::from))
+        if let Some((point, id)) = self.points.get_point_and_id(name) {
+            Some(Value::Point(point, PointProvenance::Named(id)))
+        } else {
+            self.variables.get(name).copied()
+        }
     }
 
     fn get_function(&self, name: &str) -> Option<&Function> {
@@ -288,7 +289,7 @@ mod tests {
         let parser = Lexer::new("point a = (1, 1);".as_bytes()).into_parser();
         let mut evaluator = Evaluator::new();
         evaluator.evaluate_all(parser).unwrap();
-        assert_eq!(evaluator.get_variable("a"), Some(Value::Point(1.0, 1.0)));
+        assert_eq!(evaluator.get_variable("a"), Some(value!(1, 1)));
     }
 
     macro_rules! points_multiple {
@@ -308,9 +309,9 @@ mod tests {
                 ]),
             );
             for (name, value) in &[
-                 (stringify!($first), Value::Point($first_x as f64, $first_y as f64)),
-                 $((stringify!($name), Value::Point($x as f64, $y as f64))),*,
-                 (stringify!($last), Value::Point($last_x as f64, $last_y as f64)),
+                 (stringify!($first), value!($first_x, $first_y)),
+                 $((stringify!($name), value!($x, $y))),*,
+                 (stringify!($last), value!($last_x, $last_y)),
             ] {
                 assert_eq!(evaluator.get_variable(name), Some(*value));
             }

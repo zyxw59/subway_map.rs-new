@@ -6,6 +6,7 @@ use std::result;
 use svg::node::element::path::Parameters;
 
 use crate::error::{MathError, Type};
+use crate::points::PointId;
 
 pub type Result = result::Result<Value, MathError>;
 
@@ -67,6 +68,16 @@ impl Point {
     /// Constructs a new point equal to `a * self + b * self.perp()`.
     pub fn basis(self, a: f64, b: f64) -> Point {
         self.mul_add(a, b * self.perp())
+    }
+
+    /// Constructs a new point with each coordinate being the maximum of the two points.
+    pub fn max(self, other: Point) -> Point {
+        Point(self.0.max(other.0), self.1.max(other.1))
+    }
+
+    /// Constructs a new point with each coordinate being the minimum of the two points.
+    pub fn min(self, other: Point) -> Point {
+        Point(self.0.min(other.0), self.1.min(other.1))
     }
 }
 
@@ -137,7 +148,18 @@ impl TryFrom<Value> for Point {
 
     fn try_from(value: Value) -> result::Result<Point, MathError> {
         match value {
-            Value::Point(x, y) => Ok(Point(x, y)),
+            Value::Point(p, _) => Ok(p),
+            _ => Err(MathError::Type(Type::Point, value.into())),
+        }
+    }
+}
+
+impl TryFrom<Value> for (Point, PointProvenance) {
+    type Error = MathError;
+
+    fn try_from(value: Value) -> result::Result<(Point, PointProvenance), MathError> {
+        match value {
+            Value::Point(point, provenance) => Ok((point, provenance)),
             _ => Err(MathError::Type(Type::Point, value.into())),
         }
     }
@@ -156,7 +178,7 @@ impl TryFrom<Value> for f64 {
 
 impl From<Point> for Value {
     fn from(point: Point) -> Value {
-        Value::Point(point.0, point.1)
+        Value::Point(point, PointProvenance::None)
     }
 }
 
@@ -166,11 +188,46 @@ impl From<Point> for Parameters {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// An enum representing the provenance of a point.
+#[derive(Clone, Copy, Debug)]
+pub enum PointProvenance {
+    /// The point is defined numerically.
+    None,
+    /// The point is a named point.
+    Named(PointId),
+    /// The point is the intersection  of two lines.
+    Intersection(Option<(PointId, PointId)>, Option<(PointId, PointId)>),
+}
+
+impl PointProvenance {
+    pub fn line(self, other: PointProvenance) -> Option<(PointId, PointId)> {
+        match (self, other) {
+            (PointProvenance::Named(id1), PointProvenance::Named(id2)) => Some((id1, id2)),
+            _ => None,
+        }
+    }
+}
+
+impl PartialEq for PointProvenance {
+    fn eq(&self, other: &Self) -> bool {
+        use self::PointProvenance::*;
+        match (*self, *other) {
+            (Named(id1), Named(id2)) => id1 == id2,
+            // we could check intersections for equality, but there's a lot of different
+            // combinations to check for, and even that would miss cases where points are defined
+            // as the same intersection but with the lines referred to by different points.
+            // this is probably a rare enough case that simply handling it with numerical
+            // comparison is fine.
+            _ => false,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub enum Value {
     Number(f64),
-    Point(f64, f64),
-    Line(Point, Point),
+    Point(Point, PointProvenance),
+    Line(Point, Point, Option<(PointId, PointId)>),
 }
 
 impl Value {
@@ -182,7 +239,7 @@ impl Value {
     }
 
     pub fn point(x: Value, y: Value) -> Result {
-        numeric_fn!((x, y) => Ok(Value::Point(x, y)))
+        numeric_fn!((x, y) => Ok(Value::Point(Point(x, y), PointProvenance::None)))
     }
 
     pub fn hypot(self, other: Value) -> Result {
@@ -218,32 +275,29 @@ impl Value {
     /// Unit vector in the given direction in degrees, with 0 being up the page, and increasing
     /// clockwise.
     pub fn dir(self) -> Result {
-        numeric_fn!((self) as x => Ok(Value::Point(sin_deg(x), -cos_deg(x))))
+        numeric_fn!((self) as x => Ok(Value::Point(Point(sin_deg(x), -cos_deg(x)), PointProvenance::None)))
     }
 
     /// Angle of given vector in degrees
     pub fn angle(self) -> Result {
-        use self::Value::*;
         match self {
-            Point(x, y) => Ok(Number(y.atan2(x).to_degrees())),
+            Value::Point(Point(x, y), _) => Ok(Value::Number(y.atan2(x).to_degrees())),
             x => Err(MathError::Type(Type::Point, x.into())),
         }
     }
 
     /// x value of the given point
     pub fn xpart(self) -> Result {
-        use self::Value::*;
         match self {
-            Point(x, _) => Ok(Number(x)),
+            Value::Point(Point(x, _), _) => Ok(Value::Number(x)),
             x => Err(MathError::Type(Type::Point, x.into())),
         }
     }
 
     /// y value of the given point
     pub fn ypart(self) -> Result {
-        use self::Value::*;
         match self {
-            Point(_, y) => Ok(Number(y)),
+            Value::Point(Point(_, y), _) => Ok(Value::Number(y)),
             x => Err(MathError::Type(Type::Point, x.into())),
         }
     }
@@ -251,8 +305,8 @@ impl Value {
     /// Line between two points
     pub fn line_between(self, rhs: Value) -> Result {
         match (self, rhs) {
-            (Value::Point(x1, y1), Value::Point(x2, y2)) => {
-                Ok(Value::Line(Point(x1, y1), Point(x2 - x1, y2 - y1)))
+            (Value::Point(p1, id1), Value::Point(p2, id2)) => {
+                Ok(Value::Line(p1, p2 - p1, id1.line(id2)))
             }
             _ => Err(MathError::Type(Type::Point, self.into())),
         }
@@ -261,9 +315,7 @@ impl Value {
     /// Line from point and vector
     pub fn line_vector(self, rhs: Value) -> Result {
         match (self, rhs) {
-            (Value::Point(x1, y1), Value::Point(x2, y2)) => {
-                Ok(Value::Line(Point(x1, y1), Point(x2, y2)))
-            }
+            (Value::Point(p1, _), Value::Point(p2, _)) => Ok(Value::Line(p1, p2, None)),
             _ => Err(MathError::Type(Type::Point, self.into())),
         }
     }
@@ -271,31 +323,32 @@ impl Value {
     pub fn intersect(self, rhs: Value) -> Result {
         use self::Value::*;
         match (self, rhs) {
-            (Line(p1, d1), Line(p2, d2)) => {
-                Ok((d1.mul_add((p2 - p1).cross(d2) / d1.cross(d2), p1)).into())
-            }
+            (Line(p1, d1, ids1), Line(p2, d2, ids2)) => match intersect(p1, d1, p2, d2) {
+                Some(intersection) => Ok(Point(
+                    intersection,
+                    PointProvenance::Intersection(ids1, ids2),
+                )),
+                None => Err(MathError::ParallelIntersection),
+            },
             _ => Err(MathError::Type(Type::Line, self.into())),
         }
     }
 
-    pub fn eq(self, other: Value) -> Result {
+    fn eq_bool(self, other: Value) -> std::result::Result<bool, MathError> {
         use self::Value::*;
         match (self, other) {
-            (Number(x), Number(y)) => Ok(Value::from(float_eq(x, y))),
-            (Point(x1, y1), Point(x2, y2)) => Ok(Value::from(float_eq(x1, x2) && float_eq(y1, y2))),
+            (Number(x), Number(y)) => Ok(float_eq(x, y)),
+            (Point(p1, id1), Point(p2, id2)) => Ok(id1 == id2 || point_float_eq(p1, p2)),
             _ => Err(MathError::Type(self.into(), other.into())),
         }
     }
 
+    pub fn eq(self, other: Value) -> Result {
+        self.eq_bool(other).map(Value::from)
+    }
+
     pub fn ne(self, other: Value) -> Result {
-        use self::Value::*;
-        match (self, other) {
-            (Number(x), Number(y)) => Ok(Value::from(!float_eq(x, y))),
-            (Point(x1, y1), Point(x2, y2)) => {
-                Ok(Value::from(!float_eq(x1, x2) || !float_eq(y1, y2)))
-            }
-            _ => Err(MathError::Type(self.into(), other.into())),
-        }
+        self.eq_bool(other).map(|x| Value::from(!x))
     }
 
     pub fn lt(self, other: Value) -> Result {
@@ -334,7 +387,7 @@ impl Value {
         use self::Value::*;
         match (self, other) {
             (Number(x), Number(y)) => Ok(Number(x.max(y))),
-            (Point(x1, y1), Point(x2, y2)) => Ok(Point(x1.max(x2), y1.max(y2))),
+            (Point(p1, _), Point(p2, _)) => Ok(Point(p1.max(p2), PointProvenance::None)),
             (Line(..), _) => Err(MathError::Type(Type::Number, Type::Line)),
             (_, _) => Err(MathError::Type(self.into(), other.into())),
         }
@@ -344,10 +397,16 @@ impl Value {
         use self::Value::*;
         match (self, other) {
             (Number(x), Number(y)) => Ok(Number(x.min(y))),
-            (Point(x1, y1), Point(x2, y2)) => Ok(Point(x1.min(x2), y1.min(y2))),
+            (Point(p1, _), Point(p2, _)) => Ok(Point(p1.max(p2), PointProvenance::None)),
             (Line(..), _) => Err(MathError::Type(Type::Number, Type::Line)),
             (_, _) => Err(MathError::Type(self.into(), other.into())),
         }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Value) -> bool {
+        self.eq_bool(*other).unwrap_or(false)
     }
 }
 
@@ -358,7 +417,7 @@ impl ops::Add for Value {
         use self::Value::*;
         Ok(match (self, rhs) {
             (Number(a), Number(b)) => Number(a + b),
-            (Point(x1, y1), Point(x2, y2)) => Point(x1 + x2, y1 + y2),
+            (Point(p1, _), Point(p2, _)) => Point(p1 + p2, PointProvenance::None),
             _ => return Err(MathError::Type(self.into(), rhs.into())),
         })
     }
@@ -371,7 +430,7 @@ impl ops::Sub for Value {
         use self::Value::*;
         Ok(match (self, rhs) {
             (Number(a), Number(b)) => Number(a - b),
-            (Point(x1, y1), Point(x2, y2)) => Point(x1 - x2, y1 - y2),
+            (Point(p1, _), Point(p2, _)) => Point(p1 - p2, PointProvenance::None),
             _ => return Err(MathError::Type(self.into(), rhs.into())),
         })
     }
@@ -384,9 +443,9 @@ impl ops::Mul for Value {
         use self::Value::*;
         Ok(match (self, rhs) {
             (Number(a), Number(b)) => Number(a * b),
-            (Number(a), Point(x, y)) => Point(a * x, a * y),
-            (Point(x, y), Number(a)) => Point(a * x, a * y),
-            (Point(x1, y1), Point(x2, y2)) => Number(x1 * x2 + y1 * y2),
+            (Number(a), Point(p, _)) => Point(a * p, PointProvenance::None),
+            (Point(p, _), Number(a)) => Point(p * a, PointProvenance::None),
+            (Point(p1, _), Point(p2, _)) => Number(p1 * p2),
             _ => return Err(MathError::Type(self.into(), rhs.into())),
         })
     }
@@ -400,7 +459,7 @@ impl ops::Div for Value {
         Ok(match (self, rhs) {
             (_, Number(x)) if x == 0.0 => return Err(MathError::DivisionByZero),
             (Number(a), Number(b)) => Number(a / b),
-            (Point(x, y), Number(a)) => Point(x / a, y / a),
+            (Point(p, _), Number(a)) => Point(p / a, PointProvenance::None),
             _ => return Err(MathError::Type(Type::Number, rhs.into())),
         })
     }
@@ -413,7 +472,7 @@ impl ops::Neg for Value {
         use self::Value::*;
         Ok(match self {
             Number(x) => Number(-x),
-            Point(x, y) => Point(-x, -y),
+            Point(p, _) => Point(-p, PointProvenance::None),
             _ => return Err(MathError::Type(Type::Number, self.into())),
         })
     }
@@ -452,8 +511,23 @@ fn sin_deg(x: f64) -> f64 {
     }
 }
 
+pub fn intersect(p1: Point, d1: Point, p2: Point, d2: Point) -> Option<Point> {
+    let cross = d1.cross(d2);
+    // if `cross ~= 0`, the lines are (approximately) parallel; in this case there is no
+    // intersection.
+    if cross.abs() < ::std::f64::EPSILON {
+        None
+    } else {
+        Some(d1.mul_add((p2 - p1).cross(d2) / cross, p1))
+    }
+}
+
 pub fn float_eq(x: f64, y: f64) -> bool {
     (x - y).abs() < ::std::f64::EPSILON
+}
+
+pub fn point_float_eq(p1: Point, p2: Point) -> bool {
+    (p1 - p2).norm() < ::std::f64::EPSILON
 }
 
 #[cfg(test)]

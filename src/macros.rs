@@ -134,7 +134,16 @@ macro_rules! value {
         $crate::values::Value::Number($x as f64)
     };
     ($x:expr, $y:expr) => {
-        $crate::values::Value::Point($x as f64, $y as f64)
+        $crate::values::Value::Point(
+            $crate::values::Point($x as f64, $y as f64),
+            $crate::values::PointProvenance::None,
+        )
+    };
+    ($x:expr, $y:expr, $id:expr) => {
+        $crate::values::Value::Point(
+            $crate::values::Point($x as f64, $y as f64),
+            $crate::values::PointProvenance::Named($id),
+        )
     };
 }
 

@@ -78,6 +78,8 @@ pub enum MathError {
     Type(Type, Type),
     #[fail(display = "Division by zero")]
     DivisionByZero,
+    #[fail(display = "Intersection of parallel lines")]
+    ParallelIntersection,
     #[fail(display = "Domain error")]
     Domain,
     #[fail(display = "Undefined variable {:?}", _0)]
