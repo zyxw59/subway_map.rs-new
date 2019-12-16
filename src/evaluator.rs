@@ -88,10 +88,11 @@ impl Evaluator {
                     .collect::<Result<Vec<_>, _>>()?;
                 self.points.new_line(from, spacing, points, line)?;
             }
-            StatementKind::PointBetween {
+            StatementKind::PointExtend {
                 from,
                 to: (to_multiplier, to),
                 points,
+                is_past,
             } => {
                 let mut total_distance = 0.0;
                 let points = points
@@ -104,18 +105,33 @@ impl Evaluator {
                         Ok((name, total_distance))
                     })
                     .collect::<Result<Vec<_>, EvaluatorError>>()?;
-                total_distance += to_multiplier
-                    .map(|expr| expr.evaluate(self).and_then(f64::try_from))
-                    .unwrap_or(Ok(1.0))
-                    .map_err(|err| EvaluatorError::Math(err, line))?;
-                self.points.extend_line(
-                    from,
-                    to,
-                    points
-                        .into_iter()
-                        .map(|(name, distance)| (name, distance / total_distance)),
-                    line,
-                )?;
+                if is_past {
+                    let past_multiplier = to_multiplier
+                        .map(|expr| expr.evaluate(self).and_then(f64::try_from))
+                        .unwrap_or(Ok(1.0))
+                        .map_err(|err| EvaluatorError::Math(err, line))?;
+                    self.points.extend_line(
+                        from,
+                        to,
+                        points
+                            .into_iter()
+                            .map(|(name, distance)| (name, distance / past_multiplier + 1.0)),
+                        line,
+                    )?;
+                } else {
+                    total_distance += to_multiplier
+                        .map(|expr| expr.evaluate(self).and_then(f64::try_from))
+                        .unwrap_or(Ok(1.0))
+                        .map_err(|err| EvaluatorError::Math(err, line))?;
+                    self.points.extend_line(
+                        from,
+                        to,
+                        points
+                            .into_iter()
+                            .map(|(name, distance)| (name, distance / total_distance)),
+                        line,
+                    )?;
+                }
             }
             StatementKind::Route {
                 name,

@@ -363,22 +363,35 @@ where
                 }))
             }
             // from ... to
-            "to" => {
-                let to = expect! { self,
-                    Token::LeftParen => {
-                        let multiplier = self.parse_expression(0)?;
-                        expect!(self, Token::RightParen);
-                        let ident = expect!(self, Token::Tag(tag) => tag);
-                        (Some(multiplier), ident)
-                    },
-                    Token::Tag(ident) => (None, ident),
-                };
-                expect!(self, Token::Tag(ref tag) if tag == ":");
-                let points = self.parse_comma_point_list()?;
-                Ok(Some(StatementKind::PointBetween { from, to, points }))
-            }
+            "to" => self.parse_points_extend_statement(from, false),
+            // from ... past
+            "past" => self.parse_points_extend_statement(from, true),
             _ => Err(ParserError::Token(Token::Tag(kind), self.line()).into()),
         }
+    }
+
+    fn parse_points_extend_statement(
+        &mut self,
+        from: Variable,
+        is_past: bool,
+    ) -> EResult<Option<StatementKind>> {
+        let to = expect! { self,
+            Token::LeftParen => {
+                let multiplier = self.parse_expression(0)?;
+                expect!(self, Token::RightParen);
+                let ident = expect!(self, Token::Tag(tag) => tag);
+                (Some(multiplier), ident)
+            },
+            Token::Tag(ident) => (None, ident),
+        };
+        expect!(self, Token::Tag(ref tag) if tag == ":");
+        let points = self.parse_comma_point_list()?;
+        Ok(Some(StatementKind::PointExtend {
+            from,
+            to,
+            points,
+            is_past,
+        }))
     }
 
     fn parse_stop_statement(&mut self) -> EResult<Option<StatementKind>> {
@@ -586,13 +599,14 @@ mod tests {
     fn points_between() {
         assert_statement!(
             "points from a to (1/2) d: (1/2) b, c",
-            StatementKind::PointBetween {
+            StatementKind::PointExtend {
                 from: "a".to_string(),
                 to: (Some(expression!("/", 1, 2)), "d".to_string()),
                 points: vec![
                     (Some(expression!("/", 1, 2)), "b".to_string()),
                     (None, "c".to_string()),
                 ],
+                is_past: false,
             }
         );
     }

@@ -28,11 +28,13 @@ pub enum StatementKind {
         spaced: Expression,
         points: Vec<(Option<Expression>, Variable)>,
     },
-    /// A declaration of a sequence of points, using the `from` ... `to` syntax.
-    PointBetween {
+    /// A declaration of a sequence of points, using the `from` ... `to` syntax or the
+    /// `from` ... `past` syntax.
+    PointExtend {
         from: Variable,
         to: (Option<Expression>, Variable),
         points: Vec<(Option<Expression>, Variable)>,
+        is_past: bool,
     },
     /// A declaration of a route.
     Route {
