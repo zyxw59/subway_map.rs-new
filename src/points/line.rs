@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 
-use super::{PointId, PointInfoLite, RouteId};
+use super::{PointId, PointInfoLite, RouteSegmentRef};
 use crate::values::{intersect, Point};
 
 #[derive(Clone, Debug)]
@@ -90,7 +90,7 @@ impl Line {
         p2: PointInfoLite,
         mut offset: isize,
         width: f64,
-        route_id: RouteId,
+        route_segment: RouteSegmentRef,
     ) {
         let mut p1 = self.line_point(p1);
         let mut p2 = self.line_point(p2);
@@ -124,7 +124,7 @@ impl Line {
                 } else {
                     p2
                 };
-                Some(Segment::new(p1, end_point, offset, width, route_id))
+                Some(Segment::new(p1, end_point, offset, width, route_segment))
             }
         };
 
@@ -144,7 +144,7 @@ impl Line {
                 if start_point == p2 {
                     None
                 } else {
-                    Some(Segment::new(start_point, p2, offset, width, route_id))
+                    Some(Segment::new(start_point, p2, offset, width, route_segment))
                 }
             }
         };
@@ -241,12 +241,12 @@ impl Line {
         let mut idx = start;
         while idx < end {
             // update this segment
-            self.segments[idx].update(offset, width, route_id);
+            self.segments[idx].update(offset, width, route_segment);
             // add an intermediate segment if necessary
             let curr_end = self.segments[idx].end;
             let next_start = self.segments[idx + 1].start;
             if curr_end < next_start {
-                let new_seg = Segment::new(curr_end, next_start, offset, width, route_id);
+                let new_seg = Segment::new(curr_end, next_start, offset, width, route_segment);
                 self.segments.insert(idx + 1, new_seg);
                 idx += 1;
                 end += 1;
@@ -254,7 +254,7 @@ impl Line {
             idx += 1;
         }
         // update the end segment
-        self.segments[end].update(offset, width, route_id);
+        self.segments[end].update(offset, width, route_segment);
     }
 
     pub fn segments_between(
@@ -327,6 +327,9 @@ impl Line {
         (reverse, &self.segments[idx])
     }
 
+    /// Returns up to two segments. The first segment returned is the one ending at the given
+    /// point, if it exists. The second segment returned is the segment starting with or
+    /// encompassing the given point, if it exists.
     pub fn get_segments_containing_point(&self, point: PointInfoLite) -> [Option<&Segment>; 2] {
         let point = self.line_point(point);
         let idx = self
@@ -348,6 +351,13 @@ impl Line {
                 None
             },
         ]
+    }
+
+    /// Returns whether the points are in reversed order relative to the line.
+    pub fn are_reversed(&self, a: PointInfoLite, b: PointInfoLite) -> bool {
+        let a = self.line_point(a);
+        let b = self.line_point(b);
+        a > b
     }
 
     /// True if the line is to the right of the specified point (looking in the direction of
@@ -392,7 +402,7 @@ impl Line {
 pub struct Segment {
     pub start: LinePoint,
     pub end: LinePoint,
-    routes: HashSet<(RouteId, isize)>,
+    routes: HashSet<RouteSegmentRef>,
     pos_offsets: Vec<Option<f64>>,
     neg_offsets: Vec<Option<f64>>,
 }
@@ -403,7 +413,7 @@ impl Segment {
         end: LinePoint,
         offset: isize,
         width: f64,
-        route_id: RouteId,
+        route_segment: RouteSegmentRef,
     ) -> Segment {
         Segment {
             start,
@@ -412,11 +422,15 @@ impl Segment {
             pos_offsets: Vec::new(),
             neg_offsets: Vec::new(),
         }
-        .update_new(offset, width, route_id)
+        .update_new(offset, width, route_segment)
     }
 
-    pub fn routes(&self) -> impl Iterator<Item = &(RouteId, isize)> + Clone + '_ {
+    pub fn routes(&self) -> impl Iterator<Item = &RouteSegmentRef> + Clone + '_ {
         self.routes.iter()
+    }
+
+    pub fn contains_route(&self, route_segment: &RouteSegmentRef) -> bool {
+        self.routes.contains(route_segment)
     }
 
     pub fn calculate_offset(&self, offset: isize, reverse: bool, default_width: f64) -> f64 {
@@ -522,13 +536,13 @@ impl Segment {
     }
 
     /// Update the segment with the given `offset` and `width`, returning the new segment
-    fn update_new(mut self, offset: isize, width: f64, route_id: RouteId) -> Segment {
-        self.update(offset, width, route_id);
+    fn update_new(mut self, offset: isize, width: f64, route_segment: RouteSegmentRef) -> Segment {
+        self.update(offset, width, route_segment);
         self
     }
 
     /// Update the segment with the given `offset` and `width`.
-    fn update(&mut self, offset: isize, width: f64, route_id: RouteId) {
+    fn update(&mut self, offset: isize, width: f64, route_segment: RouteSegmentRef) {
         if offset >= 0 {
             let offset = offset as usize;
             if offset >= self.pos_offsets.len() {
@@ -544,7 +558,7 @@ impl Segment {
             self.neg_offsets[offset] =
                 Some(self.neg_offsets[offset].map_or(width, |old| old.max(width)));
         }
-        self.routes.insert((route_id, offset));
+        self.routes.insert(route_segment);
     }
 
     /// Compare the segment to a point.

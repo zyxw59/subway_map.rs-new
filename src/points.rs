@@ -81,7 +81,7 @@ impl PointCollection {
             Entry::Vacant(e) => {
                 let id = RouteId(self.routes.len());
                 self.routes
-                    .push(Route::new(e.key().clone(), width, styles, line_number));
+                    .push(Route::new(e.key().clone(), id, width, styles, line_number));
                 e.insert(id);
                 Ok(id)
             }
@@ -315,9 +315,9 @@ impl PointCollection {
         let p1 = self.get_point_info(start).ok_or(start)?.info;
         let p2 = self.get_point_info(end).ok_or(end)?.info;
         let line_id = self.get_or_insert_line(p1.id, p2.id);
-        self[route].add_segment(p1.id, p2.id, offset);
+        let route_segment = self[route].add_segment(p1.id, p2.id, offset);
         let width = self[route].width;
-        self[line_id].add_segment(p1, p2, offset, width, route);
+        self[line_id].add_segment(p1, p2, offset, width, route_segment);
         Ok(())
     }
 
@@ -367,27 +367,73 @@ impl PointCollection {
         // TODO: More complicated stop icons
         // TODO: Stop labels
         // step 0: get the point info from the stop
-        let point = &self[stop.point];
-        // step 1: get the locations of all the points to place stop markers.
-        let mut points_and_routes: Vec<(Point, RouteId)> = Vec::new();
+        let point_id = stop.point;
+        let point = &self[point_id];
+        // step 1: get the set of route segments which should have stop markers at this point.
+        let mut route_segments: HashSet<RouteSegmentRef> = HashSet::new();
         for &line_id in &point.lines {
             let line = &self[line_id];
             let segments = line.get_segments_containing_point(point.info);
-            for seg in segments.iter().flatten() {
-                for &(route_id, offset) in seg.routes() {
-                    if stop
-                        .routes
+            route_segments.extend(segments.iter().flatten().flat_map(|seg| {
+                seg.routes().filter(|seg_ref| {
+                    stop.routes
                         .as_ref()
-                        .map(|routes| routes.contains(&route_id))
-                        .unwrap_or(true)
-                    {
-                        let offset = seg.calculate_offset(offset, false, default_width);
-                        let dir = line.direction;
-                        points_and_routes.push((
-                            (-dir.unit().perp()).mul_add(offset, point.info.value),
-                            route_id,
-                        ));
+                        .map_or(true, |routes| routes.contains(&seg_ref.route))
+                })
+            }));
+        }
+        // step 2: calculate stop marker locations, consolidating them as necessary.
+        let mut points_and_routes = Vec::new();
+        for &seg_ref in &route_segments {
+            let route = &self[seg_ref.route];
+            let segment = &route[seg_ref.index];
+            if point_id != segment.start && point_id != segment.end {
+                // case 1: the point is somewhere in the middle of the segment; we don't need to
+                // check for other segments.
+                points_and_routes.push(self.calculate_stop_simple(
+                    point_id,
+                    seg_ref,
+                    default_width,
+                ));
+            } else if point_id == segment.start {
+                // case 2: the point is at the start of the segment...
+                match route.get_previous(seg_ref.index) {
+                    // case 2a: ... and the end of the previous segment in the line.
+                    Some(prev_seg) if point_id == prev_seg.end => {
+                        match self.are_collinear(prev_seg.start, point_id, segment.end) {
+                            Collinearity::Sequential => {
+                                // parallel shift; take the average of the two offsets.
+                                todo!();
+                            }
+                            Collinearity::NotSequential => {
+                                // u-turn; place the marker at the top of the arc.
+                                todo!();
+                            }
+                            Collinearity::NotCollinear => {
+                                // corner; place the marker at the midpoint of the curve.
+                                todo!();
+                            }
+                        }
                     }
+                    // case 2b: ... but not at the end of a previous segment.
+                    _ => points_and_routes.push(self.calculate_stop_simple(
+                        point_id,
+                        seg_ref,
+                        default_width,
+                    )),
+                }
+            } else {
+                // case 3: the point is at the end of the segment...
+                match route.get_next(seg_ref.index) {
+                    // case 3a: ... and at the start of the next segment in the line.
+                    // we don't need to do anything here, since this case is handled by case 2a.
+                    Some(next_seg) if point_id == next_seg.start => {}
+                    // case 3b: ... but not at the start of a following segment.
+                    _ => points_and_routes.push(self.calculate_stop_simple(
+                        point_id,
+                        seg_ref,
+                        default_width,
+                    )),
                 }
             }
         }
@@ -406,6 +452,38 @@ impl PointCollection {
         }
     }
 
+    /// Calculates the location for a stop marker for a point on a single route segment.
+    fn calculate_stop_simple(
+        &self,
+        point_id: PointId,
+        seg_ref: RouteSegmentRef,
+        default_width: f64,
+    ) -> (Point, RouteId) {
+        let point = &self[point_id];
+        let route_seg = &self[seg_ref.route][seg_ref.index];
+        let line = &self[(route_seg.start, route_seg.end)];
+        let reversed = line.are_reversed(self[route_seg.start].info, self[route_seg.end].info);
+        let [seg1, seg2] = line.get_segments_containing_point(point.info);
+        let offset1 = seg1
+            .filter(|seg| seg.contains_route(&seg_ref))
+            .map(|seg| seg.calculate_offset(route_seg.offset, reversed, default_width));
+        let offset2 = seg2
+            .filter(|seg| seg.contains_route(&seg_ref))
+            .map(|seg| seg.calculate_offset(route_seg.offset, reversed, default_width));
+        let offset = match (offset1, offset2) {
+            (Some(offset1), Some(offset2)) => (offset1 + offset2) / 2.0,
+            (Some(offset), None) | (None, Some(offset)) => offset,
+            (None, None) => unreachable!(),
+        };
+        // calculated offset it relative to the course of the route; we want relative to the line.
+        let offset = if reversed { -offset } else { offset };
+        let dir = line.direction;
+        (
+            (-dir.unit().perp()).mul_add(offset, point.info.value),
+            seg_ref.route,
+        )
+    }
+
     pub fn draw_routes(&self, default_width: f64, inner_radius: f64, document: &mut Document) {
         for route in &self.routes {
             let path = self.route_to_path(route, default_width, inner_radius);
@@ -417,10 +495,10 @@ impl PointCollection {
         let mut path = Path::new()
             .set("id", format!("route-{}", route.name))
             .set("class", format!("route {}", route.style));
-        if let Some(segment) = route.segments.first() {
+        if let Some(segment) = route.first() {
             // the start of the route
             let mut data = Data::new().move_to(self.segment_start(segment, default_width));
-            for (current, next) in route.segments.iter().tuple_windows() {
+            for (current, next) in route.iter().tuple_windows() {
                 // process `current` in the loop; `next` will be handled on the next iteration, or
                 // after the loop, for the last segment.
                 for shift in self.parallel_shifts(current, default_width) {
@@ -457,7 +535,7 @@ impl PointCollection {
                         .move_to(self.segment_start(next, default_width));
                 }
             }
-            let current = route.segments.last().unwrap();
+            let current = route.last().unwrap();
             for shift in self.parallel_shifts(current, default_width) {
                 data = shift.apply(data);
             }
@@ -724,6 +802,8 @@ pub struct PointId(usize);
 pub struct Route {
     /// The name of the route.
     name: Variable,
+    /// The id of the route.
+    id: RouteId,
     /// The width of the route line.
     width: f64,
     /// The style (if any) for the route.
@@ -735,9 +815,16 @@ pub struct Route {
 }
 
 impl Route {
-    fn new(name: Variable, width: f64, style: Vec<Variable>, line_number: usize) -> Route {
+    fn new(
+        name: Variable,
+        id: RouteId,
+        width: f64,
+        style: Vec<Variable>,
+        line_number: usize,
+    ) -> Route {
         Route {
             name,
+            id,
             width,
             style: style.join(" "),
             segments: Vec::new(),
@@ -745,8 +832,55 @@ impl Route {
         }
     }
 
-    fn add_segment(&mut self, start: PointId, end: PointId, offset: isize) {
+    fn add_segment(&mut self, start: PointId, end: PointId, offset: isize) -> RouteSegmentRef {
+        let index = self.len();
         self.segments.push(RouteSegment { start, end, offset });
+        RouteSegmentRef {
+            route: self.id,
+            index,
+        }
+    }
+
+    fn first(&self) -> Option<&RouteSegment> {
+        self.segments.first()
+    }
+
+    fn last(&self) -> Option<&RouteSegment> {
+        self.segments.last()
+    }
+
+    fn get(&self, index: usize) -> Option<&RouteSegment> {
+        self.segments.get(index)
+    }
+
+    fn get_previous(&self, index: usize) -> Option<&RouteSegment> {
+        index.checked_sub(1).and_then(|index| self.get(index))
+    }
+
+    fn get_next(&self, index: usize) -> Option<&RouteSegment> {
+        index.checked_add(1).and_then(|index| self.get(index))
+    }
+
+    fn len(&self) -> usize {
+        self.segments.len()
+    }
+
+    fn iter(&self) -> ::std::slice::Iter<RouteSegment> {
+        self.segments.iter()
+    }
+}
+
+impl Index<usize> for Route {
+    type Output = RouteSegment;
+
+    fn index(&self, index: usize) -> &RouteSegment {
+        &self.segments[index]
+    }
+}
+
+impl IndexMut<usize> for Route {
+    fn index_mut(&mut self, index: usize) -> &mut RouteSegment {
+        &mut self.segments[index]
     }
 }
 
@@ -759,6 +893,14 @@ pub struct RouteSegment {
     pub start: PointId,
     pub end: PointId,
     pub offset: isize,
+}
+
+/// A reference to a segment of a route, referencing it by its `RouteId` and the index into that
+/// route's list of segments.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub struct RouteSegmentRef {
+    pub route: RouteId,
+    pub index: usize,
 }
 
 /// A stop.
