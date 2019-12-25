@@ -41,6 +41,19 @@ impl Evaluator {
         match statement {
             StatementKind::Null => {}
             StatementKind::Variable(name, expr) => {
+                if &name == "line_sep" {
+                    let value = expr
+                        .evaluate(self)
+                        .and_then(f64::try_from)
+                        .map_err(|err| EvaluatorError::Math(err, line))?;
+                    self.points.set_default_width(value);
+                } else if &name == "inner_radius" {
+                    let value = expr
+                        .evaluate(self)
+                        .and_then(f64::try_from)
+                        .map_err(|err| EvaluatorError::Math(err, line))?;
+                    self.points.set_inner_radius(value);
+                }
                 // named points can't be redefined, since lines are defined in terms of them
                 if let Some(original_line) = self.points.get_point_line_number(&name) {
                     return Err(EvaluatorError::PointRedefinition(name, line, original_line).into());
@@ -209,29 +222,11 @@ impl Evaluator {
     }
 
     pub fn draw_routes(&self, document: &mut Document) {
-        let line_sep = self
-            .variables
-            .get("line_sep")
-            .copied()
-            .and_then(Value::as_number)
-            .unwrap_or(1.0);
-        let inner_radius = self
-            .variables
-            .get("inner_radius")
-            .copied()
-            .and_then(Value::as_number)
-            .unwrap_or(0.0);
-        self.points.draw_routes(line_sep, inner_radius, document);
+        self.points.draw_routes(document);
     }
 
     pub fn draw_stops(&self, document: &mut Document) {
-        let line_sep = self
-            .variables
-            .get("line_sep")
-            .copied()
-            .and_then(Value::as_number)
-            .unwrap_or(1.0);
-        self.points.draw_stops(line_sep, document)
+        self.points.draw_stops(document)
     }
 }
 
