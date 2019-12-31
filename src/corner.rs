@@ -33,6 +33,20 @@ impl Corner {
         }
     }
 
+    /// Returns the point at the midpoint of the arc.
+    pub fn midpoint(self) -> Point {
+        let vector = (self.end - self.start).unit();
+        let sine_sq = ((self.end - self.start) / 2.0).norm2();
+        let sine = sine_sq.sqrt();
+        let versine = self.radius - (self.radius.mul_add(self.radius, sine_sq)).sqrt();
+        self.start
+            + if self.sweep {
+                vector.basis(sine, -versine)
+            } else {
+                vector.basis(sine, versine)
+            }
+    }
+
     /// Offsets the values of a `Corner` by the specified parallel distances.
     pub fn offset(self, offset_in: f64, offset_out: f64) -> Corner {
         let in_dir = (self.start - self.corner).unit();

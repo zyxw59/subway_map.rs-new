@@ -409,15 +409,18 @@ impl PointCollection {
                         match self.are_collinear(prev_seg.start, point_id, segment.end) {
                             Collinearity::Sequential => {
                                 // parallel shift; take the average of the two offsets.
-                                todo!();
+                                points_and_routes
+                                    .push(self.calculate_stop_sequential(point_id, seg_ref));
                             }
                             Collinearity::NotSequential => {
                                 // u-turn; place the marker at the top of the arc.
-                                todo!();
+                                let corner = self.u_turn(prev_seg, segment);
+                                points_and_routes.push((corner.midpoint(), seg_ref.route));
                             }
                             Collinearity::NotCollinear => {
                                 // corner; place the marker at the midpoint of the curve.
-                                todo!();
+                                let corner = self.corner(prev_seg, segment);
+                                points_and_routes.push((corner.midpoint(), seg_ref.route));
                             }
                         }
                     }
@@ -472,6 +475,42 @@ impl PointCollection {
             (Some(offset), None) | (None, Some(offset)) => offset,
             (None, None) => unreachable!(),
         };
+        // calculated offset it relative to the course of the route; we want relative to the line.
+        let offset = if reversed { -offset } else { offset };
+        let dir = line.direction;
+        (
+            (-dir.unit().perp()).mul_add(offset, point.info.value),
+            seg_ref.route,
+        )
+    }
+
+    /// Calculates the location for a stop marker for a point at the dividing point between two
+    /// segments along the same line.
+    ///
+    /// `seg_ref` refers to the segment after the point.
+    fn calculate_stop_sequential(
+        &self,
+        point_id: PointId,
+        seg_ref: RouteSegmentRef,
+    ) -> (Point, RouteId) {
+        let point = &self[point_id];
+        let next_seg = &self[seg_ref.route][seg_ref.index];
+        let prev_seg = &self[seg_ref.route][seg_ref.index - 1];
+        let line = &self[(next_seg.start, next_seg.end)];
+        let reversed = line.are_reversed(self[next_seg.start].info, self[next_seg.end].info);
+        let [seg1, seg2] = line.get_segments_containing_point(point.info);
+        // if the route is reversed relative to the line, `seg1` will match with `next_seg`, and
+        // `seg2` with `prev_seg`; otherwise `seg1` will match with `prev_seg` and `seg2` with
+        // `next_seg`.
+        // After swapping, `seg1` matches `prev_seg` and `seg2` matches `next_seg`
+        let [seg1, seg2] = if reversed { [seg2, seg1] } else { [seg1, seg2] };
+        let offset1 = seg1
+            .map(|seg| seg.calculate_offset(prev_seg.offset, reversed, self.default_width))
+            .unwrap();
+        let offset2 = seg2
+            .map(|seg| seg.calculate_offset(next_seg.offset, reversed, self.default_width))
+            .unwrap();
+        let offset = (offset1 + offset2) / 2.0;
         // calculated offset it relative to the course of the route; we want relative to the line.
         let offset = if reversed { -offset } else { offset };
         let dir = line.direction;
