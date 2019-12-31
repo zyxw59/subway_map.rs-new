@@ -1,11 +1,12 @@
 use svg::node::{
-    element::{Circle, Definitions, Group, Path, Style, Use, SVG},
-    Node,
+    element::{Circle, Definitions, Group, Path, Style, Title, Use, SVG},
+    Node, Text,
 };
 
 #[derive(Debug)]
 pub struct Document {
     view_box: (f64, f64, f64, f64),
+    title: Title,
     stylesheets: Vec<String>,
     routes_def: Definitions,
     stops_def: Definitions,
@@ -16,6 +17,10 @@ pub struct Document {
 impl Document {
     pub fn new() -> Document {
         Document::default()
+    }
+
+    pub fn set_title(&mut self, title: &str) {
+        self.title.append(Text::new(title));
     }
 
     pub fn add_route(&mut self, id: &str, style: &str, path: Path) {
@@ -60,6 +65,7 @@ impl Document {
             .set("viewBox", self.view_box)
             .set("height", self.view_box.3)
             .set("width", self.view_box.2)
+            .add(self.title)
             .add(Style::new(style_content))
             .add(self.routes_def)
             .add(self.stops_def)
@@ -73,6 +79,7 @@ impl Default for Document {
         Document {
             view_box: Default::default(),
             stylesheets: Default::default(),
+            title: Title::new(),
             routes_def: Definitions::new(),
             stops_def: Definitions::new().add(Circle::new().set("id", "stop")),
             routes_use: Group::new().set("id", "routes"),

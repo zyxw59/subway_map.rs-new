@@ -310,6 +310,12 @@ where
                             Token::String(style) => Ok(Some(StatementKind::Style(style)))
                         }
                     }
+                    // title
+                    "title" => {
+                        expect! { self,
+                            Token::String(title) => Ok(Some(StatementKind::Title(title)))
+                        }
+                    }
                     // other (variable assignment)
                     _ => {
                         let tag = self.parse_dotted_ident(tag)?;
