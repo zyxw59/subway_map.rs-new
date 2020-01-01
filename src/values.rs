@@ -397,7 +397,7 @@ impl Value {
         use self::Value::*;
         match (self, other) {
             (Number(x), Number(y)) => Ok(Number(x.min(y))),
-            (Point(p1, _), Point(p2, _)) => Ok(Point(p1.max(p2), PointProvenance::None)),
+            (Point(p1, _), Point(p2, _)) => Ok(Point(p1.min(p2), PointProvenance::None)),
             (Line(..), _) => Err(MathError::Type(Type::Number, Type::Line)),
             (_, _) => Err(MathError::Type(self.into(), other.into())),
         }
@@ -636,5 +636,10 @@ mod tests {
     #[test]
     fn intersect() {
         assert_eval!(("&", ("<>", (@1, 2), (@3, 4)), ("<>", (@1, 4), (@3, 2))), (2, 3))
+    }
+
+    #[test]
+    fn min() {
+        assert_eval!(("min", (@1, 2), ("min", (@3, 4), (@2, 1))), (1, 1))
     }
 }
