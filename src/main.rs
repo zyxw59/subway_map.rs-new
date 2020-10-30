@@ -16,7 +16,7 @@ mod values;
 
 use parser::LexerExt;
 
-fn main() -> Result<(), error::Error> {
+fn main() -> Result<(), anyhow::Error> {
     let stdin = io::stdin();
     let parser = lexer::Lexer::new(stdin.lock()).into_parser();
     let mut evaluator = evaluator::Evaluator::new();
