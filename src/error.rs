@@ -1,7 +1,7 @@
 use std::io;
 use std::result;
 
-use failure::Fail;
+use thiserror::Error;
 
 use crate::expressions::Variable;
 use crate::lexer::Token;
@@ -9,87 +9,59 @@ use crate::values::Value;
 
 pub type Result<T> = result::Result<T, Error>;
 
-#[derive(Fail, Debug)]
+#[derive(Error, Debug)]
 pub enum Error {
-    #[fail(display = "The lexer encountered an error: {}", _0)]
-    Lexer(#[cause] LexerError),
-    #[fail(display = "The parser encountered an error: {}", _0)]
-    Parser(#[cause] ParserError),
-    #[fail(display = "The evaluator encountered an error: {}", _0)]
-    Evaluator(#[cause] EvaluatorError),
+    #[error("The lexer encountered an error: {0}")]
+    Lexer(#[from] LexerError),
+    #[error("The parser encountered an error: {0}")]
+    Parser(#[from] ParserError),
+    #[error("The evaluator encountered an error: {0}")]
+    Evaluator(#[from] EvaluatorError),
 }
 
-impl From<ParserError> for Error {
-    fn from(err: ParserError) -> Error {
-        Error::Parser(err)
-    }
-}
-
-impl From<LexerError> for Error {
-    fn from(err: LexerError) -> Error {
-        Error::Lexer(err)
-    }
-}
-
-impl From<EvaluatorError> for Error {
-    fn from(err: EvaluatorError) -> Error {
-        Error::Evaluator(err)
-    }
-}
-
-#[derive(Fail, Debug)]
+#[derive(Error, Debug)]
 pub enum ParserError {
-    #[fail(display = "Unexpected end of input on line {}", _0)]
+    #[error("Unexpected end of input on line {0}")]
     EndOfInput(usize),
-    #[fail(display = "Unexpected token {:?} on line {}", _0, _1)]
+    #[error("Unexpected token {0:?} on line {1}")]
     Token(Token, usize),
-    #[fail(display = "Unclosed parentheses starting on line {}", _0)]
+    #[error("Unclosed parentheses starting on line {0}")]
     Parentheses(usize),
-    #[fail(
-        display = "Too many items in parenthesized list starting on line {} (got {}, expected 1 or 2)",
-        _1, _0
+    #[error(
+        "Too many items in parenthesized list starting on line {1} (got {0}, expected 1 or 2)"
     )]
     ParenList(usize, usize),
-    #[fail(display = "Repeated argument {} to function {} on line {}", _0, _1, _2)]
+    #[error("Repeated argument {0} to function {1} on line {2}")]
     Argument(String, String, usize),
 }
 
-#[derive(Fail, Debug)]
+#[derive(Error, Debug)]
 pub enum EvaluatorError {
-    #[fail(display = "A math error ({}) occured on line {}", _0, _1)]
-    Math(#[cause] MathError, usize),
-    #[fail(
-        display = "Point ({}) redefined on line {} (originally defined on line {}",
-        _0, _1, _2
-    )]
+    #[error("A math error ({0}) occured on line {1}")]
+    Math(#[source] MathError, usize),
+    #[error("Point ({0}) redefined on line {1} (originally defined on line {2}")]
     PointRedefinition(Variable, usize, usize),
-    #[fail(
-        display = "Route ({}) redefined on line {} (originally defined on line {}",
-        _0, _1, _2
-    )]
+    #[error("Route ({0}) redefined on line {1} (originally defined on line {2}")]
     RouteRedefinition(Variable, usize, usize),
-    #[fail(display = "An IO error ({}) occured during output", _0)]
-    Io(#[cause] io::Error),
+    #[error("An IO error ({0}) occured during output")]
+    Io(#[source] io::Error),
 }
 
-#[derive(Fail, Debug)]
+#[derive(Error, Debug)]
 pub enum MathError {
-    #[fail(display = "A type error occured (expected {:?}, got {:?})", _0, _1)]
+    #[error("A type error occured (expected {0:?}, got {1:?})")]
     Type(Type, Type),
-    #[fail(display = "Division by zero")]
+    #[error("Division by zero")]
     DivisionByZero,
-    #[fail(display = "Intersection of parallel lines")]
+    #[error("Intersection of parallel lines")]
     ParallelIntersection,
-    #[fail(display = "Domain error")]
+    #[error("Domain error")]
     Domain,
-    #[fail(display = "Undefined variable {:?}", _0)]
+    #[error("Undefined variable {0:?}")]
     Variable(Variable),
-    #[fail(display = "Undefined function {:?}", _0)]
+    #[error("Undefined function {0:?}")]
     Function(Variable),
-    #[fail(
-        display = "Incorrect number of arguments to function (expected {}, got {})",
-        _0, _1
-    )]
+    #[error("Incorrect number of arguments to function (expected {0}, got {1})")]
     Arguments(usize, usize),
 }
 
@@ -110,14 +82,14 @@ impl From<Value> for Type {
     }
 }
 
-#[derive(Fail, Debug)]
+#[derive(Error, Debug)]
 pub enum LexerError {
-    #[fail(display = "Unterminated string at line {}", _0)]
+    #[error("Unterminated string at line {0}")]
     UnterminatedString(usize),
-    #[fail(display = "Invalid UTF-8 at line {}", _0)]
+    #[error("Invalid UTF-8 at line {0}")]
     Unicode(usize),
-    #[fail(display = "An IO error ({}) occured whil reading line {}", _0, _1)]
-    Io(#[cause] io::Error, usize),
+    #[error("An IO error ({0}) occured whil reading line {1}")]
+    Io(#[source] io::Error, usize),
 }
 
 impl LexerError {
