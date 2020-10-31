@@ -42,26 +42,22 @@ impl Evaluator {
         match statement {
             StatementKind::Null => {}
             StatementKind::Variable(name, expr) => {
+                let value = expr
+                    .evaluate(self)
+                    .map_err(|err| EvaluatorError::Math(err, line))?;
                 if &name == "line_sep" {
-                    let value = expr
-                        .evaluate(self)
-                        .and_then(f64::try_from)
-                        .map_err(|err| EvaluatorError::Math(err, line))?;
+                    let value =
+                        f64::try_from(value).map_err(|err| EvaluatorError::Math(err, line))?;
                     self.points.set_default_width(value);
                 } else if &name == "inner_radius" {
-                    let value = expr
-                        .evaluate(self)
-                        .and_then(f64::try_from)
-                        .map_err(|err| EvaluatorError::Math(err, line))?;
+                    let value =
+                        f64::try_from(value).map_err(|err| EvaluatorError::Math(err, line))?;
                     self.points.set_inner_radius(value);
                 }
                 // named points can't be redefined, since lines are defined in terms of them
                 if let Some(original_line) = self.points.get_point_line_number(&name) {
                     return Err(EvaluatorError::PointRedefinition(name, line, original_line).into());
                 }
-                let value = expr
-                    .evaluate(self)
-                    .map_err(|err| EvaluatorError::Math(err, line))?;
                 self.variables.insert(name, value);
             }
             StatementKind::Function(name, function) => {
