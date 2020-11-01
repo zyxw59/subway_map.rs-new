@@ -1,10 +1,12 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 
+use serde::Serialize;
+
 use super::{PointId, PointInfoLite, RouteSegmentRef};
 use crate::values::{intersect, Point};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Line {
     pub direction: Point,
     pub origin: Point,
@@ -398,7 +400,7 @@ impl Line {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Segment {
     pub start: LinePoint,
     pub end: LinePoint,
@@ -584,7 +586,7 @@ impl PartialEq<LinePoint> for Segment {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize)]
 pub struct LinePoint {
     pub distance: f64,
     pub id: PointId,
@@ -621,5 +623,6 @@ impl PartialOrd for LinePoint {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
+#[serde(transparent)]
 pub struct LineId(pub usize);

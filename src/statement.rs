@@ -78,7 +78,7 @@ pub struct Stop {
 }
 
 /// A label for a stop.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct Label {
     /// The label text.
     pub text: String,
@@ -87,7 +87,7 @@ pub struct Label {
 }
 
 /// The position of a stop label.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub enum LabelPosition {
     End,
     Above,

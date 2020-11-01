@@ -3,6 +3,7 @@ use std::fmt;
 use std::ops;
 use std::result;
 
+use serde::Serialize;
 use svg::node::element::path::Parameters;
 
 use crate::error::{MathError, Type};
@@ -32,7 +33,7 @@ macro_rules! numeric_fn {
     };
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct Point(pub f64, pub f64);
 
 impl Point {

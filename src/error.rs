@@ -43,8 +43,10 @@ pub enum EvaluatorError {
     PointRedefinition(Variable, usize, usize),
     #[error("Route ({0}) redefined on line {1} (originally defined on line {2}")]
     RouteRedefinition(Variable, usize, usize),
-    #[error("An IO error ({0}) occured during output")]
-    Io(#[source] io::Error),
+    #[error("An IO error ({0}) occurred during output")]
+    Io(#[from] io::Error),
+    #[error("An error ({0}) occurred during debug output")]
+    DebugOutput(#[from] serde_json::Error),
 }
 
 #[derive(Error, Debug)]

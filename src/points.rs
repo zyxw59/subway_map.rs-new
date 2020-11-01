@@ -1,7 +1,8 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::collections::{btree_map::Entry, BTreeMap, HashMap, HashSet};
 use std::ops::{Index, IndexMut};
 
 use itertools::Itertools;
+use serde::Serialize;
 use svg::node::{
     element::{path::Data, Path, Use},
     Node,
@@ -18,14 +19,15 @@ use crate::values::{Point, PointProvenance};
 
 use line::{Line, LineId};
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Serialize)]
 pub struct PointCollection {
     points: Vec<PointInfo>,
-    point_ids: HashMap<Variable, PointId>,
+    point_ids: BTreeMap<Variable, PointId>,
     lines: Vec<Line>,
+    #[serde(skip)]
     pairs: HashMap<(PointId, PointId), LineId>,
     routes: Vec<Route>,
-    route_ids: HashMap<Variable, RouteId>,
+    route_ids: BTreeMap<Variable, RouteId>,
     stops: Vec<Stop>,
     default_width: f64,
     inner_radius: f64,
@@ -789,13 +791,14 @@ pub enum Collinearity {
     NotCollinear,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct PointInfo {
+    #[serde(flatten)]
     info: PointInfoLite,
     lines: HashSet<LineId>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize)]
 pub struct PointInfoLite {
     value: Point,
     id: PointId,
@@ -815,10 +818,11 @@ impl PointInfo {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
+#[serde(transparent)]
 pub struct PointId(usize);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Route {
     /// The name of the route.
     name: Variable,
@@ -904,11 +908,12 @@ impl IndexMut<usize> for Route {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
+#[serde(transparent)]
 pub struct RouteId(usize);
 
 /// A segment of a route.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize)]
 pub struct RouteSegment {
     pub start: PointId,
     pub end: PointId,
@@ -917,22 +922,24 @@ pub struct RouteSegment {
 
 /// A reference to a segment of a route, referencing it by its `RouteId` and the index into that
 /// route's list of segments.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize)]
 pub struct RouteSegmentRef {
     pub route: RouteId,
     pub index: usize,
 }
 
 /// A stop.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Stop {
     /// The location of the stop.
     pub point: PointId,
     /// The style of the stop.
     pub style: String,
     /// The set of routes which stop at the stop, or `None` if all lines stop.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub routes: Option<Vec<RouteId>>,
     /// The label.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<statement::Label>,
 }
 

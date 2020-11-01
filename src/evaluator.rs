@@ -186,6 +186,10 @@ impl Evaluator {
         Ok(())
     }
 
+    pub fn write_debug(&self, file: impl std::io::Write) -> Result<(), EvaluatorError> {
+        serde_json::to_writer_pretty(file, &self.points).map_err(Into::into)
+    }
+
     pub fn create_document(&self) -> Document {
         let mut document = Document::new();
         if let Some(ref title) = self.title {
